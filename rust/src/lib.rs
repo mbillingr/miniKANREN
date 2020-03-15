@@ -350,23 +350,23 @@ impl Structure for Vec<Value> {
 
 pub type StatSubs = Substitution<'static>;
 
-pub struct Interleave<I, J, T>
+pub struct Interleave<I, J>
 where
-    I: Iterator<Item = T>,
-    J: Iterator<Item = T>,
+    I: Iterator,
+    J: Iterator<Item = I::Item>,
 {
     iter1: I,
     iter2: J,
     next_iter: u8,
 }
 
-impl<I, J, T> Iterator for Interleave<I, J, T>
+impl<I, J> Iterator for Interleave<I, J>
 where
-    I: Iterator<Item = T>,
-    J: Iterator<Item = T>,
+    I: Iterator,
+    J: Iterator<Item = I::Item>,
 {
-    type Item = T;
-    fn next(&mut self) -> Option<T> {
+    type Item = I::Item;
+    fn next(&mut self) -> Option<Self::Item> {
         if self.next_iter == 1 {
             if let Some(x) = self.iter1.next() {
                 self.next_iter = 2;
@@ -385,10 +385,10 @@ where
     }
 }
 
-fn interleave<I, J, T>(s: I, t: J) -> Interleave<I, J, T>
+fn interleave<I, J>(s: I, t: J) -> Interleave<I, J>
 where
-    I: Iterator<Item = T>,
-    J: Iterator<Item = T>,
+    I: Iterator,
+    J: Iterator<Item = I::Item>,
 {
     Interleave {
         iter1: s,
@@ -397,23 +397,23 @@ where
     }
 }
 
-pub struct InterleaveFlatten<I, J, T>
+pub struct InterleaveFlatten<I>
 where
-    I: Iterator<Item = J>,
-    J: Iterator<Item = T>,
+    I: Iterator,
+    I::Item: Iterator,
 {
     input_iterator: I,
-    output_iterators: Vec<J>,
+    output_iterators: Vec<I::Item>,
     cursor: usize,
 }
 
-impl<I, J, T> Iterator for InterleaveFlatten<I, J, T>
+impl<I> Iterator for InterleaveFlatten<I>
 where
-    I: Iterator<Item = J>,
-    J: Iterator<Item = T>,
+    I: Iterator,
+    I::Item: Iterator,
 {
-    type Item = T;
-    fn next(&mut self) -> Option<T> {
+    type Item = <I::Item as Iterator>::Item;
+    fn next(&mut self) -> Option<Self::Item> {
         if self.cursor >= self.output_iterators.len() {
             self.cursor -= self.output_iterators.len();
         }
@@ -442,10 +442,10 @@ where
     }
 }
 
-fn interleave_flatten<I, J, T>(iter: I) -> InterleaveFlatten<I, J, T>
+fn interleave_flatten<I>(iter: I) -> InterleaveFlatten<I>
 where
-    I: Iterator<Item = J>,
-    J: Iterator<Item = T>,
+    I: Iterator,
+    I::Item: Iterator,
 {
     InterleaveFlatten {
         input_iterator: iter,
@@ -474,24 +474,18 @@ pub fn fail() -> impl Fn(StatSubs) -> iter::Empty<Substitution<'static>> {
     |_| iter::empty()
 }
 
-pub fn disj2<I, J, T>(
+pub fn disj2<I, J>(
     g1: impl Fn(StatSubs) -> I,
     g2: impl Fn(StatSubs) -> J,
-) -> impl Fn(StatSubs) -> Interleave<I, J, T>
+) -> impl Fn(StatSubs) -> Interleave<I, J>
 where
-    I: Iterator<Item = T>,
-    J: Iterator<Item = T>,
+    I: Iterator,
+    J: Iterator<Item = I::Item>,
 {
     move |s| interleave(g1(s.clone()), g2(s))
 }
 
-pub fn nevero() -> impl Fn(
-    StatSubs,
-) -> InterleaveFlatten<
-    iter::Repeat<iter::Empty<StatSubs>>,
-    iter::Empty<StatSubs>,
-    StatSubs,
-> {
+pub fn nevero() -> impl Fn(StatSubs) -> InterleaveFlatten<iter::Repeat<iter::Empty<StatSubs>>> {
     |_| interleave_flatten(iter::repeat(iter::empty()))
 }
 
@@ -563,33 +557,6 @@ pub fn once<I: Iterator<Item = StatSubs>>(
 ) -> impl Fn(StatSubs) -> iter::Take<I> {
     move |s| g(s).take(1)
 }
-
-/*impl<T: std::fmt::Debug> std::fmt::Debug for Stream<T> {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        match self {
-            Stream::Empty => write!(f, "()"),
-            Stream::Suspension(_) => write!(f, "(...)"),
-            Stream::Pair(x, next) => {
-                let mut next = next;
-                write!(f, "({:?}", x)?;
-                loop {
-                    match &**next {
-                        Stream::Empty => break,
-                        Stream::Pair(x, n) => {
-                            write!(f, " {:?}", x)?;
-                            next = n;
-                        }
-                        Stream::Suspension(_) => {
-                            write!(f, "...")?;
-                            break;
-                        }
-                    }
-                }
-                write!(f, ")")
-            }
-        }
-    }
-}*/
 
 impl std::fmt::Debug for Value {
     fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
