@@ -3,6 +3,7 @@ use std::borrow::Cow;
 use std::collections::HashMap;
 use std::fmt::Formatter;
 use std::hash::{Hash, Hasher};
+use std::iter;
 use std::rc::Rc;
 
 #[derive(Clone)]
@@ -347,184 +348,172 @@ impl Structure for Vec<Value> {
     }
 }
 
-pub enum Stream<T> {
-    Empty,
-    Pair(T, Box<Stream<T>>),
-    Suspension(Box<dyn FnOnce() -> Stream<T>>),
+pub type StatSubs = Substitution<'static>;
+
+pub struct Interleave<I, J, T>
+where
+    I: Iterator<Item = T>,
+    J: Iterator<Item = T>,
+{
+    iter1: I,
+    iter2: J,
+    next_iter: u8,
 }
 
-impl<T> Stream<T> {
-    pub fn empty() -> Self {
-        Stream::Empty
-    }
-
-    pub fn singleton(x: T) -> Self {
-        Stream::cons(x, Stream::Empty)
-    }
-
-    pub fn cons(a: T, d: Self) -> Self {
-        Stream::Pair(a, Box::new(d))
-    }
-
-    pub fn suspension(sup: impl 'static + FnOnce() -> Stream<T>) -> Self {
-        Stream::Suspension(Box::new(sup))
-    }
-
-    pub fn from_iter(mut iter: impl Iterator<Item = T>) -> Self {
-        match iter.next() {
-            None => Stream::Empty,
-            Some(item) => Stream::cons(item, Stream::from_iter(iter)),
-        }
-    }
-
-    pub fn is_empty(&self) -> bool {
-        match self {
-            Stream::Empty => true,
-            _ => false,
-        }
-    }
-
-    pub fn len(&self) -> Option<usize> {
-        match self {
-            Stream::Empty => Some(0),
-            Stream::Pair(_, d) => d.len().map(|l| l + 1),
-            Stream::Suspension(_) => None,
-        }
-    }
-
-    fn take_inf(self, n: usize) -> Stream<T> {
-        if n == 0 {
-            return Stream::empty();
-        }
-        match self {
-            Stream::Empty => Stream::empty(),
-            Stream::Pair(a, d) => Stream::cons(a, d.take_inf(n - 1)),
-            Stream::Suspension(sup) => sup().take_inf(n),
-        }
-    }
-
-    fn take_inf_all(self) -> Stream<T> {
-        match self {
-            Stream::Empty => Stream::empty(),
-            Stream::Pair(a, d) => Stream::cons(a, d.take_inf_all()),
-            Stream::Suspension(sup) => sup().take_inf_all(),
-        }
-    }
-}
-
-impl<T> std::iter::IntoIterator for Stream<T> {
+impl<I, J, T> Iterator for Interleave<I, J, T>
+where
+    I: Iterator<Item = T>,
+    J: Iterator<Item = T>,
+{
     type Item = T;
-    type IntoIter = StreamIter<T>;
-    fn into_iter(self) -> Self::IntoIter {
-        StreamIter(self)
-    }
-}
-
-pub struct StreamIter<T>(Stream<T>);
-
-impl<T> Iterator for StreamIter<T> {
-    type Item = T;
-    fn next(&mut self) -> Option<Self::Item> {
-        match std::mem::replace(&mut self.0, Stream::Empty) {
-            Stream::Empty => None,
-            Stream::Pair(a, d) => {
-                self.0 = *d;
-                Some(a)
+    fn next(&mut self) -> Option<T> {
+        if self.next_iter == 1 {
+            if let Some(x) = self.iter1.next() {
+                self.next_iter = 2;
+                Some(x)
+            } else {
+                self.iter2.next()
             }
-            Stream::Suspension(sup) => {
-                self.0 = sup();
+        } else {
+            if let Some(x) = self.iter1.next() {
+                self.next_iter = 1;
+                Some(x)
+            } else {
+                self.iter2.next()
+            }
+        }
+    }
+}
+
+fn interleave<I, J, T>(s: I, t: J) -> Interleave<I, J, T>
+where
+    I: Iterator<Item = T>,
+    J: Iterator<Item = T>,
+{
+    Interleave {
+        iter1: s,
+        iter2: t,
+        next_iter: 1,
+    }
+}
+
+pub struct InterleaveFlatten<I, J, T>
+where
+    I: Iterator<Item = J>,
+    J: Iterator<Item = T>,
+{
+    input_iterator: I,
+    output_iterators: Vec<J>,
+    cursor: usize,
+}
+
+impl<I, J, T> Iterator for InterleaveFlatten<I, J, T>
+where
+    I: Iterator<Item = J>,
+    J: Iterator<Item = T>,
+{
+    type Item = T;
+    fn next(&mut self) -> Option<T> {
+        if self.cursor >= self.output_iterators.len() {
+            self.cursor -= self.output_iterators.len();
+        }
+
+        if self.cursor == 0 {
+            match self.input_iterator.next() {
+                None => {
+                    if self.output_iterators.is_empty() {
+                        return None;
+                    }
+                }
+                Some(it) => self.output_iterators.push(it),
+            }
+        }
+
+        match self.output_iterators[self.cursor].next() {
+            Some(x) => {
+                self.cursor += 1;
+                Some(x)
+            }
+            None => {
+                self.output_iterators.swap_remove(self.cursor);
                 self.next()
             }
         }
     }
 }
 
-impl<T: 'static> Stream<T> {
-    fn append_inf(s: Stream<T>, t: Stream<T>) -> Self {
-        match s {
-            Stream::Empty => t,
-            Stream::Pair(a, d) => Stream::cons(a, Stream::append_inf(*d, t)),
-            Stream::Suspension(sup) => {
-                Stream::Suspension(Box::new(|| Stream::append_inf(t, sup())))
-            }
-        }
-    }
-
-    fn append_map_inf(self, g: Rc<dyn Fn(T) -> Self>) -> Self {
-        match self {
-            Stream::Empty => Stream::Empty,
-            Stream::Pair(a, d) => Stream::append_inf(g(a), d.append_map_inf(g)),
-            Stream::Suspension(sup) => Stream::Suspension(Box::new(|| sup().append_map_inf(g))),
-        }
-    }
-
-    pub fn map<U: 'static>(self, f: impl 'static + Fn(T) -> U) -> Stream<U> {
-        match self {
-            Stream::Empty => Stream::empty(),
-            Stream::Pair(a, d) => Stream::cons(f(a), d.map(f)),
-            Stream::Suspension(sup) => Stream::suspension(|| sup().map(f)),
-        }
+fn interleave_flatten<I, J, T>(iter: I) -> InterleaveFlatten<I, J, T>
+where
+    I: Iterator<Item = J>,
+    J: Iterator<Item = T>,
+{
+    InterleaveFlatten {
+        input_iterator: iter,
+        output_iterators: vec![],
+        cursor: 0,
     }
 }
 
-impl<T: PartialEq> PartialEq for Stream<T> {
-    fn eq(&self, other: &Self) -> bool {
-        use Stream::*;
-        match (self, other) {
-            (Empty, Empty) => true,
-            (Pair(a, x), Pair(b, y)) => a == b && x == y,
-            _ => false,
-        }
-    }
-}
-
-pub type StatSubs = Substitution<'static>;
-
-pub fn eq(u: impl Into<Value>, v: impl Into<Value>) -> impl Fn(StatSubs) -> Stream<StatSubs> {
+pub fn eq<'a>(
+    u: impl Into<Value>,
+    v: impl Into<Value>,
+) -> impl Fn(Substitution<'a>) -> iter::Take<iter::Once<Substitution<'a>>> {
     let u = u.into();
     let v = v.into();
     move |s| match s.unify(&u, &v) {
-        Some(s) => Stream::singleton(s),
-        None => Stream::empty(),
+        Some(s) => iter::once(s).take(1),
+        None => iter::once(Substitution::empty()).take(0),
     }
 }
 
-pub fn succeed() -> impl Fn(StatSubs) -> Stream<StatSubs> {
-    |s| Stream::singleton(s)
+pub fn succeed<'a>() -> impl Fn(Substitution<'a>) -> iter::Once<Substitution<'a>> {
+    |s| iter::once(s)
 }
 
-pub fn fail() -> impl Fn(StatSubs) -> Stream<StatSubs> {
-    |_| Stream::empty()
+pub fn fail() -> impl Fn(StatSubs) -> iter::Empty<Substitution<'static>> {
+    |_| iter::empty()
 }
 
-pub fn disj2(
-    g1: impl Fn(StatSubs) -> Stream<StatSubs>,
-    g2: impl Fn(StatSubs) -> Stream<StatSubs>,
-) -> impl Fn(StatSubs) -> Stream<StatSubs> {
-    move |s| Stream::append_inf(g1(s.clone()), g2(s))
+pub fn disj2<I, J, T>(
+    g1: impl Fn(StatSubs) -> I,
+    g2: impl Fn(StatSubs) -> J,
+) -> impl Fn(StatSubs) -> Interleave<I, J, T>
+where
+    I: Iterator<Item = T>,
+    J: Iterator<Item = T>,
+{
+    move |s| interleave(g1(s.clone()), g2(s))
 }
 
-pub fn nevero() -> impl Fn(StatSubs) -> Stream<StatSubs> {
-    |s| Stream::Suspension(Box::new(|| nevero()(s)))
+pub fn nevero() -> impl Fn(
+    StatSubs,
+) -> InterleaveFlatten<
+    iter::Repeat<iter::Empty<StatSubs>>,
+    iter::Empty<StatSubs>,
+    StatSubs,
+> {
+    |_| interleave_flatten(iter::repeat(iter::empty()))
 }
 
-pub fn alwayso() -> impl Fn(StatSubs) -> Stream<StatSubs> {
-    |s| Stream::Suspension(Box::new(|| disj2(succeed(), alwayso())(s)))
+pub fn alwayso() -> impl Fn(StatSubs) -> iter::Repeat<StatSubs> {
+    |s| iter::repeat(s)
 }
 
-pub fn conj2(
-    g1: impl Fn(StatSubs) -> Stream<StatSubs>,
-    g2: impl 'static + Fn(StatSubs) -> Stream<StatSubs>,
-) -> impl Fn(StatSubs) -> Stream<StatSubs> {
+pub fn conj2<I, J>(
+    g1: impl Fn(StatSubs) -> I,
+    g2: impl 'static + Fn(StatSubs) -> J,
+) -> impl Fn(StatSubs) -> Box<dyn Iterator<Item = StatSubs>>
+where
+    I: 'static + Iterator<Item = StatSubs>,
+    J: 'static + Iterator<Item = StatSubs>,
+{
     let g2 = Rc::new(g2);
-    move |s| g1(s).append_map_inf(g2.clone())
-}
-
-pub fn call_with_fresh_var<T: Fn(StatSubs) -> Stream<StatSubs>>(
-    name: impl Into<String>,
-    f: impl Fn(Var) -> T,
-) -> T {
-    f(Var::new(name))
+    move |s| {
+        Box::new(interleave_flatten(g1(s).map({
+            let g2 = g2.clone();
+            move |sg| g2(sg)
+        })))
+    }
 }
 
 pub fn reify(v: Value) -> impl Fn(StatSubs) -> Value {
@@ -535,45 +524,47 @@ pub fn reify(v: Value) -> impl Fn(StatSubs) -> Value {
     }
 }
 
-pub fn run_goal(n: Option<usize>, g: impl Fn(StatSubs) -> Stream<StatSubs>) -> Stream<StatSubs> {
+pub fn run_goal<I: Iterator<Item = StatSubs>>(
+    n: Option<usize>,
+    g: impl Fn(StatSubs) -> I,
+) -> iter::Take<I> {
     match n {
-        Some(n) => g(Substitution::empty()).take_inf(n),
-        None => g(Substitution::empty()).take_inf_all(),
+        Some(n) => g(Substitution::empty()).take(n),
+        None => g(Substitution::empty()).take(usize::max_value()), // todo: usize::max is not really an infinite iterator...
     }
 }
 
-pub fn ifte(
-    g1: impl Fn(StatSubs) -> Stream<StatSubs>,
-    g2: impl 'static + Fn(StatSubs) -> Stream<StatSubs>,
-    g3: impl Fn(StatSubs) -> Stream<StatSubs>,
-) -> impl Fn(StatSubs) -> Stream<StatSubs> {
+pub fn ifte<I, J, K>(
+    g1: impl Fn(StatSubs) -> I,
+    g2: impl 'static + Fn(StatSubs) -> J,
+    g3: impl Fn(StatSubs) -> K,
+) -> impl Fn(StatSubs) -> Box<dyn Iterator<Item = StatSubs>>
+where
+    I: 'static + Iterator<Item = StatSubs>,
+    J: 'static + Iterator<Item = StatSubs>,
+    K: 'static + Iterator<Item = StatSubs>,
+{
     let g2 = Rc::new(g2);
     move |s| {
-        let mut s_inf = g1(s.clone());
-        loop {
-            match s_inf {
-                Stream::Empty => return g3(s),
-                Stream::Pair(_, _) => return s_inf.append_map_inf(g2.clone()),
-                Stream::Suspension(sup) => s_inf = sup(),
-            }
+        let mut s_inf = g1(s.clone()).peekable();
+        if s_inf.peek().is_none() {
+            Box::new(g3(s))
+        } else {
+            Box::new(interleave_flatten(s_inf.map({
+                let g2 = g2.clone();
+                move |sg| g2(sg)
+            })))
         }
     }
 }
 
-pub fn once(g: impl Fn(StatSubs) -> Stream<StatSubs>) -> impl Fn(StatSubs) -> Stream<StatSubs> {
-    move |s| {
-        let mut s_inf = g(s);
-        loop {
-            match s_inf {
-                Stream::Empty => return Stream::Empty,
-                Stream::Pair(a, _) => return Stream::singleton(a),
-                Stream::Suspension(sup) => s_inf = sup(),
-            }
-        }
-    }
+pub fn once<I: Iterator<Item = StatSubs>>(
+    g: impl Fn(StatSubs) -> I,
+) -> impl Fn(StatSubs) -> iter::Take<I> {
+    move |s| g(s).take(1)
 }
 
-impl<T: std::fmt::Debug> std::fmt::Debug for Stream<T> {
+/*impl<T: std::fmt::Debug> std::fmt::Debug for Stream<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
             Stream::Empty => write!(f, "()"),
@@ -598,7 +589,7 @@ impl<T: std::fmt::Debug> std::fmt::Debug for Stream<T> {
             }
         }
     }
-}
+}*/
 
 impl std::fmt::Debug for Value {
     fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
@@ -647,7 +638,7 @@ macro_rules! conj {
 #[macro_export]
 macro_rules! defrel {
     ($name:ident($($args:ident),*) { $($g:expr);* }) => {
-        fn $name($($args: impl 'static + Into<Value>),*) -> impl Fn(StatSubs) -> Stream<StatSubs> {
+        fn $name($($args: impl 'static + Into<Value>),*) -> impl Fn(StatSubs) -> Box<dyn Iterator<Item = StatSubs>> {
             $(
                 let $args = $args.into();
             )*
@@ -655,7 +646,7 @@ macro_rules! defrel {
                 $(
                     let $args = $args.clone();
                 )*
-                Stream::suspension(move || conj!($($g),*)(s))
+                Box::from(conj!($($g),*)(s))
             }
         }
     }
@@ -749,6 +740,28 @@ mod tests {
     }
 
     #[test]
+    fn test_interleave_flatten() {
+        struct InfiniteIterators {
+            n: usize,
+        }
+
+        impl Iterator for InfiniteIterators {
+            type Item = iter::StepBy<std::ops::RangeFrom<usize>>;
+            fn next(&mut self) -> Option<Self::Item> {
+                self.n += 1;
+                let inc = usize::pow(10, self.n as u32);
+                Some((inc..).step_by(inc))
+            }
+        }
+
+        let iter = interleave_flatten(InfiniteIterators { n: 0 });
+        assert_eq!(
+            iter.take(10).collect::<Vec<_>>(),
+            vec![10, 20, 100, 30, 200, 1_000, 40, 300, 2_000, 10_000]
+        )
+    }
+
+    #[test]
     fn it_works() {
         let u = Var::new("u");
         let v = Var::new("v");
@@ -794,64 +807,54 @@ mod tests {
         );
 
         assert_eq!(
-            eq(&x, Value::Var(u.clone()))(Substitution::empty()),
-            Stream::singleton(substitution!(x: u))
+            eq(&x, Value::Var(u.clone()))(Substitution::empty()).collect::<Vec<_>>(),
+            vec![substitution!(x: u)]
         );
         assert_eq!(
-            eq(&x, 42)(Substitution::empty()),
-            Stream::singleton(substitution!(x: 42))
+            eq(&x, 42)(Substitution::empty()).collect::<Vec<_>>(),
+            vec![substitution!(x: 42)]
         );
         assert_eq!(
-            eq(42, 42)(Substitution::empty()),
-            Stream::singleton(substitution!())
+            eq(42, 42)(Substitution::empty()).collect::<Vec<_>>(),
+            vec![substitution!()]
         );
-        assert_eq!(eq(42, 123)(Substitution::empty()), Stream::empty());
-
-        assert_eq!(fail()(Substitution::empty()), Stream::Empty);
-        assert_eq!(eq(true, false)(Substitution::empty()), Stream::Empty);
         assert_eq!(
-            eq(&x, &y)(Substitution::empty()),
-            Stream::singleton(substitution! {x: y})
+            eq(42, 123)(Substitution::empty()).collect::<Vec<_>>(),
+            vec![]
         );
 
+        assert_eq!(fail()(Substitution::empty()).collect::<Vec<_>>(), vec![]);
         assert_eq!(
-            disj2(eq("olive", &x), eq("oil", &x))(Substitution::empty()),
-            Stream::cons(
-                substitution! {x: "olive"},
-                Stream::cons(substitution! {x: "oil"}, Stream::empty())
-            )
+            eq(true, false)(Substitution::empty()).collect::<Vec<_>>(),
+            vec![]
+        );
+        assert_eq!(
+            eq(&x, &y)(Substitution::empty()).collect::<Vec<_>>(),
+            vec![substitution! {x: y}]
+        );
+
+        assert_eq!(
+            disj2(eq("olive", &x), eq("oil", &x))(Substitution::empty()).collect::<Vec<_>>(),
+            vec![substitution! {x: "olive"}, substitution! {x: "oil"}]
         );
 
         // no value - stack overflow
-        //assert_eq!(nevero()(Substitution::empty()).take_inf(1), Stream::Empty);
+        //assert_eq!(nevero()(Substitution::empty()).take(1).collect::<Vec<_>>(), vec![]);
 
         assert_eq!(
-            alwayso()(Substitution::empty()).take_inf(3),
-            Stream::from_iter(
-                vec![
-                    Substitution::empty(),
-                    Substitution::empty(),
-                    Substitution::empty()
-                ]
-                .into_iter()
-            )
+            alwayso()(Substitution::empty()).take(3).collect::<Vec<_>>(),
+            vec![Substitution::empty(); 3]
         );
 
         assert_eq!(
-            disj2(eq("olive", &x), eq("oil", &x))(Substitution::empty())
-                .take_inf(5)
-                .len(),
-            Some(2)
+            conj2(eq("olive", &x), eq("oil", x.clone()))(Substitution::empty()).collect::<Vec<_>>(),
+            vec![]
         );
 
         assert_eq!(
-            conj2(eq("olive", &x), eq("oil", x.clone()))(Substitution::empty()),
-            Stream::empty()
-        );
-
-        assert_eq!(
-            conj2(eq("olive", &x), eq(y.clone(), x.clone()))(Substitution::empty()),
-            Stream::singleton(substitution! {y: "olive", x: "olive"})
+            conj2(eq("olive", &x), eq(y.clone(), x.clone()))(Substitution::empty())
+                .collect::<Vec<_>>(),
+            vec![substitution! {y: "olive", x: "olive"}]
         );
 
         assert_eq!(
@@ -884,32 +887,31 @@ mod tests {
 
         assert_eq!(
             run_goal(Some(5), disj2(eq("olive", &x), eq("oil", &x)))
-                .into_iter()
                 .map(|s| reify((&x).into())(s))
                 .collect::<Vec<_>>(),
             vec![Value::from("olive"), Value::from("oil")],
         );
 
         assert_eq!(
-            ifte(succeed(), eq(false, y.clone()), eq(true, y.clone()))(Substitution::empty()),
-            Stream::singleton(substitution!(y: false))
+            ifte(succeed(), eq(false, y.clone()), eq(true, y.clone()))(Substitution::empty())
+                .collect::<Vec<_>>(),
+            vec![substitution!(y: false)]
         );
 
         assert_eq!(
-            ifte(fail(), eq(false, y.clone()), eq(true, y.clone()))(Substitution::empty()),
-            Stream::singleton(substitution!(y: true))
+            ifte(fail(), eq(false, y.clone()), eq(true, y.clone()))(Substitution::empty())
+                .collect::<Vec<_>>(),
+            vec![substitution!(y: true)]
         );
 
         assert_eq!(
-            disj!(eq("virgin", &x), eq("olive", &x), eq("oil", &x))(Substitution::empty()),
-            Stream::from_iter(
-                vec![
-                    substitution! {x: "virgin"},
-                    substitution! {x: "olive"},
-                    substitution! {x: "oil"},
-                ]
-                .into_iter()
-            )
+            disj!(eq("virgin", &x), eq("olive", &x), eq("oil", &x))(Substitution::empty())
+                .collect::<Vec<_>>(),
+            vec![
+                substitution! {x: "virgin"},
+                substitution! {x: "olive"},
+                substitution! {x: "oil"},
+            ]
         );
 
         defrel! {
@@ -919,26 +921,30 @@ mod tests {
         }
 
         assert_eq!(
-            teacup(x.clone())(Substitution::empty())
-                .into_iter()
-                .collect::<Vec<_>>(),
+            teacup(x.clone())(Substitution::empty()).collect::<Vec<_>>(),
             vec![substitution!(x: "tea"), substitution!(x: "cup")]
         );
 
         assert_eq!(
-            format!("{:?}", fresh!(x, y { eq(x, y); })(Substitution::empty())),
-            "({x: y})"
+            format!(
+                "{:?}",
+                fresh!(x, y { eq(x, y); })(Substitution::empty()).collect::<Vec<_>>()
+            ),
+            "[{x: y}]"
         );
 
-        assert_eq!(run!(1, x {}), Stream::singleton(Value::RV(0)));
-        assert_eq!(run!(1, x { eq(x, 42); }), Stream::singleton(Value::new(42)));
+        assert_eq!(run!(1, x {}).collect::<Vec<_>>(), vec![Value::RV(0)]);
         assert_eq!(
-            run!(1, (x, y) { }),
-            Stream::singleton(Value::new(vec![Value::RV(0), Value::RV(1)]))
+            run!(1, x { eq(x, 42); }).collect::<Vec<_>>(),
+            vec![Value::new(42)]
         );
         assert_eq!(
-            run!(1, (x, y) { eq(x, 42); }),
-            Stream::singleton(Value::new(vec![Value::new(42), Value::RV(0)]))
+            run!(1, (x, y) { }).collect::<Vec<_>>(),
+            vec![Value::new(vec![Value::RV(0), Value::RV(1)])]
+        );
+        assert_eq!(
+            run!(1, (x, y) { eq(x, 42); }).collect::<Vec<_>>(),
+            vec![Value::new(vec![Value::new(42), Value::RV(0)])]
         );
 
         defrel! {
@@ -948,39 +954,43 @@ mod tests {
         }
 
         assert_eq!(
-            run!(*, x { conso(1, 2, x); }),
-            Stream::singleton(Value::new(vec![Value::new(1), Value::new(2)]))
+            run!(*, x { conso(1, 2, x); }).collect::<Vec<_>>(),
+            vec![Value::new(vec![Value::new(1), Value::new(2)])]
         );
         assert_eq!(
-            run!(*, x { conso(1, x, vec![Value::new(1), Value::new(2)]); }),
-            Stream::singleton(Value::new(2))
+            run!(*, x { conso(1, x, vec![Value::new(1), Value::new(2)]); }).collect::<Vec<_>>(),
+            vec![Value::new(2)]
         );
         assert_eq!(
-            run!(*, x { conso(x, 2, vec![Value::new(1), Value::new(2)]); }),
-            Stream::singleton(Value::new(1))
+            run!(*, x { conso(x, 2, vec![Value::new(1), Value::new(2)]); }).collect::<Vec<_>>(),
+            vec![Value::new(1)]
         );
         assert_eq!(
-            run!(*, x { conso(x.clone(), x, vec![Value::new(1), Value::new(2)]); }),
-            Stream::empty()
+            run!(*, x { conso(x.clone(), x, vec![Value::new(1), Value::new(2)]); })
+                .collect::<Vec<_>>(),
+            Vec::<Value>::new()
         );
         assert_eq!(
-            run!(*, x { conso(x.clone(), x, vec![Value::new(3), Value::new(3)]); }),
-            Stream::singleton(Value::new(3))
+            run!(*, x { conso(x.clone(), x, vec![Value::new(3), Value::new(3)]); })
+                .collect::<Vec<_>>(),
+            vec![Value::new(3)]
         );
 
         assert_eq!(
             run!(5, q {
                 eq(q, "onion");
-            }),
-            Stream::singleton(Value::new("onion"))
+            })
+            .collect::<Vec<_>>(),
+            vec![Value::new("onion")]
         );
 
         assert_eq!(
             run!(5, q {
                 eq(q, "onion");
                 alwayso();
-            }),
-            Stream::from_iter(std::iter::repeat(Value::new("onion")).take(5))
+            })
+            .collect::<Vec<_>>(),
+            vec![Value::new("onion"); 5]
         );
     }
 }
