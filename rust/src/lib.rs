@@ -93,13 +93,16 @@ impl<'s> Substitution<'s> {
         }
     }
 
-    fn walk<'a>(&'a self, v: &'a Value) -> &'a Value {
-        if let Value::Var(var) = v {
-            if let Some(next) = self.subs.get(var) {
-                return self.walk(next);
+    fn walk<'a>(&'a self, mut v: &'a Value) -> &'a Value {
+        loop {
+            if let Value::Var(var) = v {
+                if let Some(next) = self.subs.get(var) {
+                    v = next;
+                    continue;
+                }
             }
+            return v;
         }
-        v
     }
 
     fn walk_star(&self, v: &Value) -> Value {
