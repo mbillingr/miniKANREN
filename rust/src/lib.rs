@@ -457,59 +457,84 @@ where
     }
 }
 
-pub fn eq<'a>(
-    u: impl Into<Value>,
-    v: impl Into<Value>,
-) -> impl Fn(Substitution<'a>) -> iter::Take<iter::Once<Substitution<'a>>> {
+pub trait Goal<'a> {
+    type Result: Iterator<Item = Substitution<'a>>;
+    fn run(&self, s: Substitution<'a>) -> Self::Result;
+}
+
+impl<'a, T, I> Goal<'a> for T
+where
+    T: Fn(Substitution<'a>) -> I,
+    I: Iterator<Item = Substitution<'a>>,
+{
+    type Result = I;
+    fn run(&self, s: Substitution<'a>) -> Self::Result {
+        self(s)
+    }
+}
+
+struct Eq(Value, Value);
+
+impl<'a> Goal<'a> for Eq {
+    type Result = iter::Take<iter::Once<Substitution<'a>>>;
+    fn run(&self, s: Substitution<'a>) -> Self::Result {
+        match s.unify(&self.0, &self.1) {
+            Some(s) => iter::once(s).take(1),
+            None => iter::once(Substitution::empty()).take(0),
+        }
+    }
+}
+
+pub fn eq<'a>(u: impl Into<Value>, v: impl Into<Value>) -> impl Goal<'a> {
     let u = u.into();
     let v = v.into();
-    move |s| match s.unify(&u, &v) {
+    move |s: Substitution<'a>| match s.unify(&u, &v) {
         Some(s) => iter::once(s).take(1),
         None => iter::once(Substitution::empty()).take(0),
     }
 }
 
-pub fn succeed<'a>() -> impl Fn(Substitution<'a>) -> iter::Once<Substitution<'a>> {
+pub fn succeed<'a>() -> impl Goal<'a> {
     |s| iter::once(s)
 }
 
-pub fn fail() -> impl Fn(StatSubs) -> iter::Empty<Substitution<'static>> {
+pub fn fail() -> impl Goal<'static> {
     |_| iter::empty()
 }
 
-pub fn disj2<I, J>(
-    g1: impl Fn(StatSubs) -> I,
-    g2: impl Fn(StatSubs) -> J,
-) -> impl Fn(StatSubs) -> Interleave<I, J>
+pub fn disj2<'a, I, J>(
+    g1: impl Goal<'a, Result = I>,
+    g2: impl Goal<'a, Result = J>,
+) -> impl Goal<'a>
 where
-    I: Iterator,
-    J: Iterator<Item = I::Item>,
+    I: Iterator<Item = Substitution<'a>>,
+    J: Iterator<Item = Substitution<'a>>,
 {
-    move |s| interleave(g1(s.clone()), g2(s))
+    move |s: Substitution<'a>| interleave(g1.run(s.clone()), g2.run(s))
 }
 
-pub fn nevero() -> impl Fn(StatSubs) -> InterleaveFlatten<iter::Repeat<iter::Empty<StatSubs>>> {
+pub fn nevero() -> impl Goal<'static> {
     |_| interleave_flatten(iter::repeat(iter::empty()))
 }
 
-pub fn alwayso() -> impl Fn(StatSubs) -> iter::Repeat<StatSubs> {
+pub fn alwayso<'a>() -> impl Goal<'a> {
     |s| iter::repeat(s)
 }
 
-pub fn conj2<I, J>(
-    g1: impl Fn(StatSubs) -> I,
-    g2: impl 'static + Fn(StatSubs) -> J,
-) -> impl Fn(StatSubs) -> Box<dyn Iterator<Item = StatSubs>>
+pub fn conj2<'a, I, J>(
+    g1: impl Goal<'a, Result = I>,
+    g2: impl Goal<'a, Result = J>,
+) -> impl Goal<'a>
 where
-    I: 'static + Iterator<Item = StatSubs>,
-    J: 'static + Iterator<Item = StatSubs>,
+    I: Iterator<Item = Substitution<'a>>,
+    J: Iterator<Item = Substitution<'a>>,
 {
     let g2 = Rc::new(g2);
     move |s| {
-        Box::new(interleave_flatten(g1(s).map({
+        interleave_flatten(g1.run(s).map({
             let g2 = g2.clone();
-            move |sg| g2(sg)
-        })))
+            move |sg| g2.run(sg)
+        }))
     }
 }
 
@@ -521,44 +546,37 @@ pub fn reify(v: Value) -> impl Fn(StatSubs) -> Value {
     }
 }
 
-pub fn run_goal<I: Iterator<Item = StatSubs>>(
-    n: Option<usize>,
-    g: impl Fn(StatSubs) -> I,
-) -> iter::Take<I> {
-    match n {
-        Some(n) => g(Substitution::empty()).take(n),
-        None => g(Substitution::empty()).take(usize::max_value()), // todo: usize::max is not really an infinite iterator...
-    }
+pub fn run_goal<'a, G: Goal<'a>>(g: G) -> G::Result {
+    g.run(Substitution::empty())
 }
 
-pub fn ifte<I, J, K>(
-    g1: impl Fn(StatSubs) -> I,
-    g2: impl 'static + Fn(StatSubs) -> J,
-    g3: impl Fn(StatSubs) -> K,
-) -> impl Fn(StatSubs) -> Box<dyn Iterator<Item = StatSubs>>
+pub fn ifte<'a, I, J, K>(
+    g1: impl Goal<'a, Result = I>,
+    g2: impl 'static + Goal<'a, Result = J>,
+    g3: impl Goal<'a, Result = K>,
+) -> impl Goal<'a, Result = Box<dyn Iterator<Item = Substitution<'a>>>>
 where
-    I: 'static + Iterator<Item = StatSubs>,
-    J: 'static + Iterator<Item = StatSubs>,
-    K: 'static + Iterator<Item = StatSubs>,
+    I: 'static + Iterator<Item = Substitution<'a>>,
+    J: 'static + Iterator<Item = Substitution<'a>>,
+    K: 'static + Iterator<Item = Substitution<'a>>,
 {
     let g2 = Rc::new(g2);
-    move |s| {
-        let mut s_inf = g1(s.clone()).peekable();
-        if s_inf.peek().is_none() {
-            Box::new(g3(s))
+    move |s: Substitution<'a>| {
+        let mut s_inf = g1.run(s.clone()).peekable();
+        let result: Box<dyn Iterator<Item = Substitution>> = if s_inf.peek().is_none() {
+            Box::new(g3.run(s))
         } else {
             Box::new(interleave_flatten(s_inf.map({
                 let g2 = g2.clone();
-                move |sg| g2(sg)
+                move |sg| g2.run(sg)
             })))
-        }
+        };
+        result
     }
 }
 
-pub fn once<I: Iterator<Item = StatSubs>>(
-    g: impl Fn(StatSubs) -> I,
-) -> impl Fn(StatSubs) -> iter::Take<I> {
-    move |s| g(s).take(1)
+pub fn once<'a>(g: impl Goal<'a>) -> impl Goal<'a> {
+    move |s| g.run(s).take(1)
 }
 
 impl std::fmt::Debug for Value {
@@ -608,7 +626,7 @@ macro_rules! conj {
 #[macro_export]
 macro_rules! defrel {
     ($name:ident($($args:ident),*) { $($g:expr);* }) => {
-        fn $name($($args: impl 'static + Into<Value>),*) -> impl Fn(StatSubs) -> Box<dyn Iterator<Item = StatSubs>> {
+        fn $name<'a>($($args: impl Into<Value>),*) -> impl Goal<'a> {
             $(
                 let $args = $args.into();
             )*
@@ -616,7 +634,7 @@ macro_rules! defrel {
                 $(
                     let $args = $args.clone();
                 )*
-                Box::from(conj!($($g),*)(s))
+                conj!($($g),*).run(s)
             }
         }
     }
@@ -624,24 +642,8 @@ macro_rules! defrel {
 
 #[macro_export]
 macro_rules! run {
-    (*, ($($x:ident),*) $body:tt) => {
-        run!(@ None, ($($x),*) $body)
-    };
-
-    (*, $q:ident { $($g:expr;)* }) => {
-        run!(@ None, $q { $($g;)* })
-    };
-
-    ($n:expr, ($($x:ident),*) $body:tt) => {
-        run!(@ Some($n), ($($x),*) $body)
-    };
-
-    ($n:expr, $q:ident { $($g:expr;)* }) => {
-        run!(@ Some($n), $q { $($g;)* })
-    };
-
-    (@ $n:expr, ($($x:ident),*) { $($g:expr;)* }) => {
-        run!(@ $n, q {
+    ($n:tt, ($($x:ident),*) { $($g:expr;)* }) => {
+        run!($n, q {
             fresh!($($x),* {
                 eq(vec![$(Value::Var($x.clone())),*], q);
                 $($g;)*
@@ -649,10 +651,16 @@ macro_rules! run {
         })
     };
 
-    (@ $n:expr, $q:ident { $($g:expr;)* }) => {{
+    (*, $q:ident { $($g:expr;)* }) => {{
         let $q = Var::new(stringify!($q));
         let var = Value::Var($q.clone());
-        run_goal($n, conj!($($g),*)).map(reify(var))
+        run_goal(conj!($($g),*)).map(reify(var))
+    }};
+
+    ($n:expr, $q:ident { $($g:expr;)* }) => {{
+        let $q = Var::new(stringify!($q));
+        let var = Value::Var($q.clone());
+        run_goal(conj!($($g),*)).map(reify(var)).take($n)
     }};
 }
 
@@ -777,34 +785,43 @@ mod tests {
         );
 
         assert_eq!(
-            eq(&x, Value::Var(u.clone()))(Substitution::empty()).collect::<Vec<_>>(),
+            eq(&x, Value::Var(u.clone()))
+                .run(Substitution::empty())
+                .collect::<Vec<_>>(),
             vec![substitution!(x: u)]
         );
         assert_eq!(
-            eq(&x, 42)(Substitution::empty()).collect::<Vec<_>>(),
+            eq(&x, 42).run(Substitution::empty()).collect::<Vec<_>>(),
             vec![substitution!(x: 42)]
         );
         assert_eq!(
-            eq(42, 42)(Substitution::empty()).collect::<Vec<_>>(),
+            eq(42, 42).run(Substitution::empty()).collect::<Vec<_>>(),
             vec![substitution!()]
         );
         assert_eq!(
-            eq(42, 123)(Substitution::empty()).collect::<Vec<_>>(),
+            eq(42, 123).run(Substitution::empty()).collect::<Vec<_>>(),
             vec![]
         );
 
-        assert_eq!(fail()(Substitution::empty()).collect::<Vec<_>>(), vec![]);
         assert_eq!(
-            eq(true, false)(Substitution::empty()).collect::<Vec<_>>(),
+            fail().run(Substitution::empty()).collect::<Vec<_>>(),
             vec![]
         );
         assert_eq!(
-            eq(&x, &y)(Substitution::empty()).collect::<Vec<_>>(),
+            eq(true, false)
+                .run(Substitution::empty())
+                .collect::<Vec<_>>(),
+            vec![]
+        );
+        assert_eq!(
+            eq(&x, &y).run(Substitution::empty()).collect::<Vec<_>>(),
             vec![substitution! {x: y}]
         );
 
         assert_eq!(
-            disj2(eq("olive", &x), eq("oil", &x))(Substitution::empty()).collect::<Vec<_>>(),
+            disj2(eq("olive", &x), eq("oil", &x))
+                .run(Substitution::empty())
+                .collect::<Vec<_>>(),
             vec![substitution! {x: "olive"}, substitution! {x: "oil"}]
         );
 
@@ -812,17 +829,23 @@ mod tests {
         //assert_eq!(nevero()(Substitution::empty()).take(1).collect::<Vec<_>>(), vec![]);
 
         assert_eq!(
-            alwayso()(Substitution::empty()).take(3).collect::<Vec<_>>(),
+            alwayso()
+                .run(Substitution::empty())
+                .take(3)
+                .collect::<Vec<_>>(),
             vec![Substitution::empty(); 3]
         );
 
         assert_eq!(
-            conj2(eq("olive", &x), eq("oil", x.clone()))(Substitution::empty()).collect::<Vec<_>>(),
+            conj2(eq("olive", &x), eq("oil", x.clone()))
+                .run(Substitution::empty())
+                .collect::<Vec<_>>(),
             vec![]
         );
 
         assert_eq!(
-            conj2(eq("olive", &x), eq(y.clone(), x.clone()))(Substitution::empty())
+            conj2(eq("olive", &x), eq(y.clone(), x.clone()))
+                .run(Substitution::empty())
                 .collect::<Vec<_>>(),
             vec![substitution! {y: "olive", x: "olive"}]
         );
@@ -856,26 +879,30 @@ mod tests {
         );
 
         assert_eq!(
-            run_goal(Some(5), disj2(eq("olive", &x), eq("oil", &x)))
+            run_goal(disj2(eq("olive", &x), eq("oil", &x)))
                 .map(|s| reify((&x).into())(s))
+                .take(5)
                 .collect::<Vec<_>>(),
             vec![Value::from("olive"), Value::from("oil")],
         );
 
         assert_eq!(
-            ifte(succeed(), eq(false, y.clone()), eq(true, y.clone()))(Substitution::empty())
+            ifte(succeed(), eq(false, y.clone()), eq(true, y.clone()))
+                .run(Substitution::empty())
                 .collect::<Vec<_>>(),
             vec![substitution!(y: false)]
         );
 
         assert_eq!(
-            ifte(fail(), eq(false, y.clone()), eq(true, y.clone()))(Substitution::empty())
+            ifte(fail(), eq(false, y.clone()), eq(true, y.clone()))
+                .run(Substitution::empty())
                 .collect::<Vec<_>>(),
             vec![substitution!(y: true)]
         );
 
         assert_eq!(
-            disj!(eq("virgin", &x), eq("olive", &x), eq("oil", &x))(Substitution::empty())
+            disj!(eq("virgin", &x), eq("olive", &x), eq("oil", &x))
+                .run(Substitution::empty())
                 .collect::<Vec<_>>(),
             vec![
                 substitution! {x: "virgin"},
@@ -891,19 +918,24 @@ mod tests {
         }
 
         assert_eq!(
-            teacup(x.clone())(Substitution::empty()).collect::<Vec<_>>(),
+            teacup(x.clone())
+                .run(Substitution::empty())
+                .collect::<Vec<_>>(),
             vec![substitution!(x: "tea"), substitution!(x: "cup")]
         );
 
         assert_eq!(
             format!(
                 "{:?}",
-                fresh!(x, y { eq(x, y); })(Substitution::empty()).collect::<Vec<_>>()
+                fresh!(x, y { eq(x, y); })
+                    .run(Substitution::empty())
+                    .collect::<Vec<_>>()
             ),
             "[{x: y}]"
         );
 
         assert_eq!(run!(1, x {}).collect::<Vec<_>>(), vec![Value::RV(0)]);
+        assert_eq!(run!(*, x {}).collect::<Vec<_>>(), vec![Value::RV(0)]);
         assert_eq!(
             run!(1, x { eq(x, 42); }).collect::<Vec<_>>(),
             vec![Value::new(42)]
