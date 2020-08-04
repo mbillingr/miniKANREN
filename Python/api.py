@@ -1,4 +1,6 @@
-from core import reify, run_goal
+import inspect
+
+from core import reify, run_goal, variables
 from goals import conj
 
 
@@ -17,3 +19,10 @@ def run(*args):
         return map(reify(var), run_goal(conj(*goals)))
     else:
         return map(reify(var), run_goal(n, conj(*goals)))
+
+
+def fresh(body):
+    spec = inspect.signature(body)
+    var_names = spec.parameters.keys()
+    fresh_vars = (variables(name) for name in var_names)
+    return body(*fresh_vars)

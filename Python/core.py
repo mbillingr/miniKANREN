@@ -7,10 +7,6 @@ Variable = sy.Symbol
 Variable.__unify__ = lambda self, other, s: s.extend(self, other)
 
 
-class Reified:
-    pass
-
-
 class SUSPENSION:
     pass
 
@@ -20,7 +16,7 @@ def is_var(x):
 
 
 def is_atom(x):
-    return type(x) in {bool, int, float, str, type(None), type, Reified}
+    return type(x) in {bool, int, float, str, type(None), type, ReifiedVariable}
 
 
 def as_iterable(x):
@@ -30,6 +26,17 @@ def as_iterable(x):
         return iter(x)
     except TypeError:
         return None
+
+
+class ReifiedVariable:
+    def __init__(self, n):
+        self.name = reify_name(n)
+
+    def __eq__(self, other):
+        return self.name == str(other)
+
+    def __str__(self):
+        return self.name
 
 
 class InvalidSubstitution(Singleton):
@@ -132,8 +139,8 @@ class Substitution:
         v = self.walk_var(v)
         if is_var(v):
             n = len(self.subs)
-            rn = reify_name(n)
-            return Substitution(self.subs.insert(v, rn))
+            rv = ReifiedVariable(n)
+            return Substitution(self.subs.insert(v, rv))
         elif is_atom(v):
             return self
 
