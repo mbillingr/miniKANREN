@@ -24,5 +24,13 @@ def run(*args):
 def fresh(body):
     spec = inspect.signature(body)
     var_names = spec.parameters.keys()
-    fresh_vars = (variables(name) for name in var_names)
-    return body(*fresh_vars)
+    fresh_vars = [variables(name) for name in var_names]
+    subgoals = body(*fresh_vars)
+    try:
+        return conj(*subgoals)
+    except TypeError:
+        return conj(subgoals)
+
+
+def defrel(func):
+    return func

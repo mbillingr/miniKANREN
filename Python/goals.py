@@ -136,7 +136,8 @@ class IteratorSplicer:
     def yield_next(self):
         while not self.is_empty():
             try:
-                yield next(self.iterators[0])
+                x = next(self.iterators[0])
+                yield x
                 self.iterators.rotate()
                 return
             except StopIteration:
