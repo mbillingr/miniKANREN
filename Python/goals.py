@@ -1,5 +1,6 @@
 import sympy as sy
 
+from core import gen_var
 from stream import SuspendIteration, take, append_inf, append_map_inf
 
 
@@ -132,3 +133,12 @@ def suspend(s, goal):
     """suspend the goal once"""
     raise SuspendIteration(goal(s))
     yield
+
+
+@make_goal
+def listo(s, x):
+    """goal that succeeds if x is a list"""
+    list = []
+    while True:
+        yield from same(x, list)(s)
+        list.append(gen_var('__'))

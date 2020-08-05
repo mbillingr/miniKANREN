@@ -155,7 +155,7 @@ class Substitution:
         return r
 
     def __eq__(self, other):
-        return isinstance(other, Substitution) and set(self.subs) == set(other.subs)
+        return isinstance(other, Substitution) and dict(self.subs) == dict(other.subs)
 
     def __hash__(self):
         return hash(self.subs)
@@ -179,6 +179,10 @@ def run_goal(n_or_goal, goal=None):
     else:
         n = n_or_goal
         return take(n, goal(Substitution()))
+
+
+def gen_var(name):
+    return variables(gen_name(name))
 
 
 FRESH_COUNTER = 0

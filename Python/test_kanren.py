@@ -1,8 +1,8 @@
 import pytest
 
-from core import variables, Substitution, InvalidSubstitution, reify, run_goal
+from core import variables, Substitution, InvalidSubstitution, reify, run_goal, reset_names
 from functional_data_structures import Map
-from goals import same, fail, succeed, conj, disj, make_goal, never, always, ifte, once, symeq, suspend
+from goals import same, fail, succeed, conj, disj, make_goal, never, always, ifte, once, symeq, suspend, listo
 from stream import SuspendIteration, take
 
 
@@ -289,3 +289,17 @@ def test_symeq_solve_hard():
     x = variables("x")
     goal = symeq(x ** 2, x)
     assert set(goal(Substitution())) == {Substitution({x: 0}), Substitution({x: 1})}
+
+
+def test_listo():
+    reset_names()
+    x = variables("x")
+    goal = listo(x)
+    s_inf = goal(Substitution())
+    v1 = variables('__1')
+    v2 = variables('__2')
+    v3 = variables('__3')
+    assert next(s_inf) == Substitution({x: []})
+    assert next(s_inf) == Substitution({x: [v1]})
+    assert next(s_inf) == Substitution({x: [v1, v2]})
+    assert next(s_inf) == Substitution({x: [v1, v2, v3]})
