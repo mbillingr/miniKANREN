@@ -138,7 +138,53 @@ def suspend(s, goal):
 @make_goal
 def listo(s, x):
     """goal that succeeds if x is a list"""
-    list = []
+    if isinstance(x, list):
+        yield s
+        return
+
+    seq = []
     while True:
-        yield from same(x, list)(s)
-        list.append(gen_var('__'))
+        yield from same(x, seq)(s)
+        seq.append(gen_var('__'))
+
+
+@make_goal
+def appendo(s, a, b, l):
+    a = s.walk_var(a)
+    b = s.walk_var(b)
+    l = s.walk_var(l)
+
+    if isinstance(a, list) and isinstance(b, list):
+        yield from same(a + b, l)(s)
+    elif isinstance(a, list) and isinstance(l, list):
+        n = len(a)
+        yield from conj(same(a, l[:n]),
+                        same(b, l[n:]))(s)
+    elif isinstance(b, list) and isinstance(l, list):
+        n = len(l) - len(b)
+        yield from conj(same(a, l[:n]),
+                        same(b, l[n:]))(s)
+    elif isinstance(l, list):
+        for n in range(len(l) + 1):
+            yield from conj(same(a, l[:n]),
+                            same(b, l[n:]))(s)
+    elif isinstance(a, list):
+        seq = []
+        while True:
+            yield from conj(same(b, seq),
+                            same(l, a + seq))(s)
+            seq.append(gen_var('__'))
+    elif isinstance(b, list):
+        seq = []
+        while True:
+            yield from conj(same(a, seq),
+                            same(l, seq + b))(s)
+            seq.append(gen_var('__'))
+    else:
+        seq = []
+        while True:
+            for n in range(len(seq) + 1):
+                yield from conj(same(a, seq[:n]),
+                                same(b, seq[n:]),
+                                same(l, seq))(s)
+            seq.append(gen_var('__'))

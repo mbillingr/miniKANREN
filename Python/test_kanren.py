@@ -1,8 +1,9 @@
 import pytest
 
+from api import run
 from core import variables, Substitution, InvalidSubstitution, reify, run_goal, reset_names
 from functional_data_structures import Map
-from goals import same, fail, succeed, conj, disj, make_goal, never, always, ifte, once, symeq, suspend, listo
+from goals import same, fail, succeed, conj, disj, make_goal, never, always, ifte, once, symeq, suspend, listo, appendo
 from stream import SuspendIteration, take
 
 
@@ -303,3 +304,35 @@ def test_listo():
     assert next(s_inf) == Substitution({x: [v1]})
     assert next(s_inf) == Substitution({x: [v1, v2]})
     assert next(s_inf) == Substitution({x: [v1, v2, v3]})
+
+    s_inf = listo([1, 2, 3])(Substitution())
+    assert list(s_inf) == [Substitution()]
+
+
+def test_appendo():
+    reset_names()
+    w, x, y, z = variables("w, x, y, z")
+
+    goal = conj(same(z, (x, y)), appendo(x, y, [1, 2, 3]))
+    assert list(run(z, goal)) == [([], [1, 2, 3]),
+                                  ([1], [2, 3]),
+                                  ([1, 2], [3]),
+                                  ([1, 2, 3], [])]
+
+    goal = conj(same(z, (x, y)), appendo([1, 2, 3], x, y))
+    assert list(run(3, z, goal)) == [([], [1, 2, 3]),
+                                     (['_0'], [1, 2, 3, '_0']),
+                                     (['_0', '_1'], [1, 2, 3, '_0', '_1'])]
+
+    goal = conj(same(z, (x, y)), appendo(x, [1, 2, 3], y))
+    assert list(run(3, z, goal)) == [([], [1, 2, 3]),
+                                     (['_0'], ['_0', 1, 2, 3]),
+                                     (['_0', '_1'], ['_0', '_1', 1, 2, 3])]
+
+    goal = conj(same(z, (w, x, y)), appendo(w, x, y))
+    assert list(run(6, z, goal)) == [([], [], []),
+                                     ([], ['_0'], ['_0']),
+                                     (['_0'], [], ['_0']),
+                                     ([], ['_0', '_1'], ['_0', '_1']),
+                                     (['_0'], ['_1'], ['_0', '_1']),
+                                     (['_0', '_1'], [], ['_0', '_1'])]

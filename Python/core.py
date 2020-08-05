@@ -125,14 +125,16 @@ class Substitution:
         if strict and type(x) != type(y):
             return InvalidSubstitution()
 
+        if len(x) != len(y):
+            return InvalidSubstitution()
+
         x_iter = as_iterable(x)
         y_iter = as_iterable(y)
 
         if x_iter and y_iter:
             for xi, yi in zip(x_iter, y_iter):
                 self = self.unify(xi, yi)
-            if is_empty(x_iter) and is_empty(y_iter):
-                return self
+            return self
         return InvalidSubstitution()
 
     def reify(self, v):
