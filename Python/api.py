@@ -1,7 +1,8 @@
 import inspect
 
-from core import reify, run_goal, variables
+from core import reify, run_goal, variables, gen_name
 from goals import conj
+from stream import SuspendIteration
 
 
 def run(*args):
@@ -24,13 +25,25 @@ def run(*args):
 def fresh(body):
     spec = inspect.signature(body)
     var_names = spec.parameters.keys()
-    fresh_vars = [variables(name) for name in var_names]
+    fresh_vars = [variables(gen_name(name)) for name in var_names]
     subgoals = body(*fresh_vars)
     try:
         return conj(*subgoals)
     except TypeError:
-        return conj(subgoals)
+        return subgoals
 
 
 def defrel(func):
-    return func
+    # return func
+    # return lambda *args: suspend(func(*args))
+    # return lambda *args: lambda s: func(*args)(s)
+    # tmp = lambda s, *args: func(*args, s)
+
+    def wrapper(*args):
+        def goal(s):
+            raise SuspendIteration(func(*args)(s))
+            yield
+
+        return goal
+
+    return wrapper

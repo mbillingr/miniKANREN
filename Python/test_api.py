@@ -1,6 +1,6 @@
 from api import run, fresh, defrel
-from core import variables, Substitution
-from goals import fail, same, succeed, disj, conj, make_goal
+from core import variables, Substitution, reset_names
+from goals import fail, same, succeed, disj
 
 
 def test_run_fail():
@@ -30,22 +30,29 @@ def test_fresh_no_vars():
 
 
 def test_fresh_one_var():
+    reset_names()
     goal = fresh(lambda x: same(x, 1))
     r = goal(Substitution())
-    assert list(r) == [Substitution({variables('x'): 1})]
+    assert list(r) == [Substitution({variables('x1'): 1})]
 
 
 def test_fresh_multiple_vars():
+    reset_names()
     goal = fresh(lambda x, y, z: same(x, y))
     r = goal(Substitution())
-    assert list(r) == [Substitution({variables('x'): variables('y')})]
+    assert list(r) == [Substitution({variables('x1'): variables('y2')})]
 
 
 def test_fresh_multiple_conditions():
+    reset_names()
     goal = fresh(lambda x, y, z: (same(x, y), same(x, z)))
     r = goal(Substitution())
-    x, y, z = variables('x, y, z')
-    assert list(r) == [Substitution({x: z, z: y})]
+    x, y, z = variables('x1, y2, z3')
+    allowed_results = [[Substitution({x: y, y: z})],
+                       [Substitution({x: y, z: x})],
+                       [Substitution({x: z, z: y})],
+                       [Substitution({x: z, y: z})]]
+    assert list(r) in allowed_results
 
 
 def test_run_fresh():
@@ -99,8 +106,7 @@ def test_recursion():
     def listo(l):
         return disj(nullo(l),
                     fresh(lambda d: (cdro(l, d),
-                                     lambda s:
-                                        listo(d)(s))))
+                                     listo(d))))
 
     @defrel
     def nullo(x):
@@ -112,7 +118,12 @@ def test_recursion():
 
     q = variables('q')
 
-    r = run(q, listo(()))
+    goal = listo(())
+    r = run(3, q, goal)
+    assert list(r) == ['_0']
 
-    assert next(r) == '_0'
-    next(r)  # runs into infinite recursion
+    r = run(4, q, listo(q))
+    assert list(r) == [(),
+                       ('_0', ()),
+                       ('_0', ('_1', ())),
+                       ('_0', ('_1', ('_2', ())))]

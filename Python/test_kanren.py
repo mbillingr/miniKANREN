@@ -1,6 +1,15 @@
-from core import variables, Substitution, InvalidSubstitution, SUSPENSION, take, reify, run_goal
+import pytest
+
+from core import variables, Substitution, InvalidSubstitution, reify, run_goal
 from functional_data_structures import Map
-from goals import same, fail, succeed, conj, disj, make_goal, never, always, ifte, once, symeq
+from goals import same, fail, succeed, conj, disj, make_goal, never, always, ifte, once, symeq, suspend
+from stream import SuspendIteration, take
+
+
+def assert_suspended(stream):
+    with pytest.raises(SuspendIteration) as e_info:
+        next(stream)
+    return e_info.value.stream
 
 
 def test_walk1():
@@ -96,14 +105,22 @@ def test_make_goal():
         assert s == Substitution({x: i})
 
 
+def test_never():
+    goal = never
+    s_inf = goal(Substitution())
+    s_inf = assert_suspended(s_inf)
+    s_inf = assert_suspended(s_inf)
+    s_inf = assert_suspended(s_inf)
+
+
 def test_disj_x_never():
     x = variables("x")
     goal = disj(same("olive", x),
                 never)
     s_inf = goal(Substitution())
     assert next(s_inf) == Substitution({x: "olive"})
-    assert next(s_inf) == SUSPENSION
-    assert next(s_inf) == SUSPENSION
+    s_inf = assert_suspended(s_inf)
+    s_inf = assert_suspended(s_inf)
 
 
 def test_disj_never_x():
@@ -111,9 +128,10 @@ def test_disj_never_x():
     goal = disj(never,
                 same("olive", x))
     s_inf = goal(Substitution())
-    assert next(s_inf) == SUSPENSION
+    s_inf = assert_suspended(s_inf)
     assert next(s_inf) == Substitution({x: "olive"})
-    assert next(s_inf) == SUSPENSION
+    s_inf = assert_suspended(s_inf)
+    s_inf = assert_suspended(s_inf)
 
 
 def test_always():
@@ -229,6 +247,36 @@ def test_ifte_once_disj():
                 same(False, y),
                 same(True, y))
     assert list(goal(Substitution())) == [Substitution({x: True, y: False})]
+
+
+def test_ifte_cond_suspended():
+    y = variables("y")
+    goal = ifte(suspend(succeed),
+                same(False, y),
+                same(True, y))
+    s_inf = goal(Substitution())
+    s_inf = assert_suspended(s_inf)
+    assert list(s_inf) == [Substitution({y: False})]
+
+
+def test_ifte_g1_suspended():
+    y = variables("y")
+    goal = ifte(succeed,
+                suspend(same(False, y)),
+                same(True, y))
+    s_inf = goal(Substitution())
+    s_inf = assert_suspended(s_inf)
+    assert list(s_inf) == [Substitution({y: False})]
+
+
+def test_ifte_g2_suspended():
+    y = variables("y")
+    goal = ifte(fail,
+                same(False, y),
+                suspend(same(True, y)))
+    s_inf = goal(Substitution())
+    s_inf = assert_suspended(s_inf)
+    assert list(s_inf) == [Substitution({y: True})]
 
 
 def test_symeq_solve_easy():

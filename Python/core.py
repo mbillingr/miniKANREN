@@ -1,14 +1,11 @@
 import sympy as sy
 
 from functional_data_structures import Map, Singleton
+from stream import take, take_inf
 
 variables = sy.symbols
 Variable = sy.Symbol
 Variable.__unify__ = lambda self, other, s: s.extend(self, other)
-
-
-class SUSPENSION:
-    pass
 
 
 def is_var(x):
@@ -17,6 +14,14 @@ def is_var(x):
 
 def is_atom(x):
     return type(x) in {bool, int, float, str, type(None), type, ReifiedVariable}
+
+
+def is_empty(x):
+    try:
+        next(x)
+    except StopIteration:
+        return True
+    return False
 
 
 def as_iterable(x):
@@ -35,7 +40,7 @@ class ReifiedVariable:
     def __eq__(self, other):
         return self.name == str(other)
 
-    def __str__(self):
+    def __repr__(self):
         return self.name
 
 
@@ -126,9 +131,9 @@ class Substitution:
         if x_iter and y_iter:
             for xi, yi in zip(x_iter, y_iter):
                 self = self.unify(xi, yi)
-            return self
-        else:
-            return InvalidSubstitution()
+            if is_empty(x_iter) and is_empty(y_iter):
+                return self
+        return InvalidSubstitution()
 
     def reify(self, v):
         v = self.walk_deep(v)
@@ -159,11 +164,6 @@ class Substitution:
         return 'Substitution({})'.format(self.subs)
 
 
-def take(n, iter):
-    for _, item in zip(range(n), iter):
-        yield item
-
-
 def reify(v):
     return lambda s: s.reify(v)
 
@@ -175,7 +175,21 @@ def reify_name(n):
 def run_goal(n_or_goal, goal=None):
     if goal is None:
         goal = n_or_goal
-        return goal(Substitution())
+        return take_inf(goal(Substitution()))
     else:
         n = n_or_goal
         return take(n, goal(Substitution()))
+
+
+FRESH_COUNTER = 0
+
+
+def gen_name(name):
+    global FRESH_COUNTER
+    FRESH_COUNTER += 1
+    return name + str(FRESH_COUNTER)
+
+
+def reset_names():
+    global FRESH_COUNTER
+    FRESH_COUNTER = 0

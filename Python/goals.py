@@ -1,8 +1,6 @@
-from collections import deque
-
 import sympy as sy
 
-from core import SUSPENSION, take
+from stream import SuspendIteration, take, append_inf, append_map_inf
 
 
 def make_goal(func):
@@ -54,7 +52,8 @@ def succeed(s):
 def never(s):
     """goal that never produces a substitution"""
     while True:
-        yield SUSPENSION
+        raise SuspendIteration(never(s))
+        yield  # turns function into generator, even if it's unreachable
 
 
 def always(s):
@@ -64,104 +63,40 @@ def always(s):
 
 
 @make_goal
-def disj(s, *subgoals):
+def disj(s, subgoal1, *subgoals):
     """goal that succeeds if any of its subgoals succeeds"""
-    splicer = IteratorSplicer(g(s) for g in subgoals)
-    yield from splicer.drain()
+    stream = subgoal1(s)
+    for g in subgoals:
+        stream = append_inf(stream, g(s))
+    yield from stream
 
 
 @make_goal
-def conj2(s, g1, g2):
-    """goal that succeeds if g1 and g2 succeed"""
-    stream_combiner = IteratorSplicer()
-    for t in g1(s):
-        stream_combiner.append(g2(t))
-        yield from stream_combiner.yield_one_from_each()
-    yield from stream_combiner.drain()
-
-
-def conj(g1, *subgoals):
-    """produce a goal that succeeds if all of its subgoals succeed"""
-
-    def build(x, g, target):
-        return lambda t: AppendLater(target, map(x, g(t)))
-
-    def goal(s):
-        """goal that succeeds if all of its subgoals succeed"""
-        stream_combiner = IteratorSplicer()
-        generator_combiner = IteratorSplicer()
-
-        gg = lambda u: AppendLater(stream_combiner, g1(u))
-        for g in subgoals:
-            gg = build(gg, g, generator_combiner)
-        gg = map(gg, [s])
-        generator_combiner.append(gg)
-
-        for gen in generator_combiner.drain():
-            yield from stream_combiner.yield_one_from_each()
-            gen.append_now()
-        yield from stream_combiner.drain()
-
-    return goal
-
-
-class AppendLater:
-    def __init__(self, target, item):
-        self.item = item
-        self.target = target
-
-    def append_now(self):
-        self.target.append(self.item)
-
-
-class IteratorSplicer:
-    def __init__(self, iterators=()):
-        self.iterators = deque(iterators)
-
-    def is_empty(self):
-        return not self.iterators
-
-    def append(self, iterable):
-        self.iterators.append(iterable)
-
-    def drain(self):
-        while not self.is_empty():
-            yield from self.yield_next()
-
-    def yield_one_from_each(self):
-        """Yield one item from each iterator and remove exhausted iterators"""
-        for _ in range(len(self.iterators)):
-            yield from self.yield_next()
-
-    def yield_next(self):
-        while not self.is_empty():
-            try:
-                x = next(self.iterators[0])
-                yield x
-                self.iterators.rotate()
-                return
-            except StopIteration:
-                self.iterators.popleft()
+def conj(s, subgoal1, *subgoals):
+    """goal that succeeds if all of its subgoals succeed"""
+    stream = subgoal1(s)
+    for g in subgoals:
+        stream = append_map_inf(g, stream)
+    yield from stream
 
 
 @make_goal
 def ifte(s, g_cond, g_true, g_false):
     """goal that succeeds if g_cond and g_true succeed or g_cond fails and g_false succeeds"""
-    s_inf = g_cond(s)
 
-    try:
-        first_cond = next(s_inf)
-    except StopIteration:
-        yield from g_false(s)
-        return
+    def loop(s_inf=g_cond(s)):
+        try:
+            first_cond = next(s_inf)
+        except StopIteration:
+            yield from g_false(s)
+            return
+        except SuspendIteration as suspension:
+            raise SuspendIteration(loop(suspension.stream))
 
-    stream_combiner = IteratorSplicer()
-    stream_combiner.append(g_true(first_cond))
+        yield from append_inf(g_true(first_cond),
+                              append_map_inf(g_true, s_inf))
 
-    for t in s_inf:
-        yield from stream_combiner.yield_one_from_each()
-        stream_combiner.append(g_true(t))
-    yield from stream_combiner.drain()
+    return loop()
 
 
 @make_goal
@@ -190,3 +125,10 @@ def symeq(s, u, v):
             t = s.unify(symbol, solution)
             if t.is_valid():
                 yield t
+
+
+@make_goal
+def suspend(s, goal):
+    """suspend the goal once"""
+    raise SuspendIteration(goal(s))
+    yield
