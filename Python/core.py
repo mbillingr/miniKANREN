@@ -13,7 +13,9 @@ def is_var(x):
 
 
 def is_atom(x):
-    return type(x) in {bool, int, float, str, type(None), type, ReifiedVariable}
+    return type(x) in {bool, int, float, str, type(None), type, ReifiedVariable,
+                       sy.core.add.Add,
+                       sy.core.numbers.Integer, sy.core.numbers.Zero, sy.core.numbers.One, sy.core.numbers.NegativeOne}
 
 
 def is_empty(x):

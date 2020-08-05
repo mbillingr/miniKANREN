@@ -1,6 +1,6 @@
 import sympy as sy
 
-from core import gen_var
+from core import gen_var, is_var
 from stream import SuspendIteration, take, append_inf, append_map_inf
 
 
@@ -188,3 +188,27 @@ def appendo(s, a, b, l):
                                 same(b, seq[n:]),
                                 same(l, seq))(s)
             seq.append(gen_var('__'))
+
+
+@make_goal
+def poso(s, x):
+    """goal that succeeds if x is a positive integer"""
+    if isinstance(x, int):
+        if x >= 0:
+            yield s
+    elif is_var(x):
+        n = 0
+        while True:
+            n += 1
+            yield from same(x, n)(s)
+
+
+@make_goal
+def rangeo(s, lo, x, hi):
+    """goal that succeeds if x is an integer and lo <= x < hi"""
+    if isinstance(x, int):
+        if lo <= x < hi:
+            yield s
+    elif is_var(x):
+        for n in range(lo, hi):
+            yield from same(x, n)(s)

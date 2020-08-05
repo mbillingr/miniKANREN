@@ -3,7 +3,8 @@ import pytest
 from api import run
 from core import variables, Substitution, InvalidSubstitution, reify, run_goal, reset_names
 from functional_data_structures import Map
-from goals import same, fail, succeed, conj, disj, make_goal, never, always, ifte, once, symeq, suspend, listo, appendo
+from goals import (same, fail, succeed, conj, disj, make_goal, never, always, ifte, once, symeq,
+                   suspend, listo, appendo, poso, rangeo)
 from stream import SuspendIteration, take
 
 
@@ -336,3 +337,32 @@ def test_appendo():
                                      ([], ['_0', '_1'], ['_0', '_1']),
                                      (['_0'], ['_1'], ['_0', '_1']),
                                      (['_0', '_1'], [], ['_0', '_1'])]
+
+
+def test_poso():
+    x = variables("x")
+    assert list(run(3, x, poso('abc'))) == []
+    assert list(run(3, x, poso(42))) == ['_0']
+    assert list(run(3, x, poso(x))) == [1, 2, 3]
+
+
+def test_rangeo():
+    x = variables("x")
+    assert list(run(x, rangeo(-2, 'abc', 2))) == []
+    assert list(run(x, rangeo(-2, 42, 2))) == []
+    assert list(run(x, rangeo(-2, -1, 2))) == ['_0']
+    assert list(run(x, rangeo(-2, x, 2))) == [-2, -1, 0, 1]
+
+
+def test_symeq_integers():
+    a, x, y, z = variables("a, x, y, z")
+    goal = conj(same(a, (x, y, z)),
+                rangeo(-1, y, 2),
+                rangeo(1, z, 3),
+                symeq(x + y, z))
+    assert list(run(a, goal)) == [(2, -1, 1),
+                                  (1, 0, 1),
+                                  (3, -1, 2),
+                                  (0, 1, 1),
+                                  (2, 0, 2),
+                                  (1, 1, 2)]
