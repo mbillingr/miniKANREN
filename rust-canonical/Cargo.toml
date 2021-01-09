@@ -3,6 +3,12 @@ name = "mini-kanren"
 version = "0.1.0"
 authors = ["Martin Billinger <mbillingr@users.noreply.github.com>"]
 edition = "2018"
+license = "MIT OR Apache-2.0"
+description = "miniKANREN in Rust"
+readme = "README.md"
+repository = "https://github.com/mbillingr/miniKANREN"
+keywords = ["dsl", "logic", "kanren"]
+categories = ["algorithms", "mathematics"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 

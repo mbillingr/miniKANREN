@@ -1,6 +1,6 @@
 [package]
-name = "mini-kanren"
-version = "0.2.0"
+name = "mini-kanren-r"
+version = "0.1.0"
 authors = ["Martin Billinger <mbillingr@users.noreply.github.com>"]
 edition = "2018"
 
