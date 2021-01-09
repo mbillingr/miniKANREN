@@ -634,7 +634,7 @@ impl std::fmt::Debug for Substitution<'_> {
 macro_rules! disj {
     () => { fail() };
     ($g:expr) => { $g };
-    ($g0:expr, $($g:expr),*) => { disj2($g0, disj!($($g),*))}
+    ($g0:expr; $($g:expr);*) => { disj2($g0, disj!($($g);*))}
 }
 
 #[macro_export]
@@ -646,7 +646,7 @@ macro_rules! conj {
 
 #[macro_export]
 macro_rules! defrel {
-    ($name:ident($($args:ident),*) { $($g:expr);* }) => {
+    ($name:ident($($args:ident),*) { $($g:expr),* $(,)? }) => {
         fn $name($($args: impl 'static + Into<Value>),*) -> impl Fn(StatSubs) -> Stream<StatSubs> {
             $(
                 let $args = $args.into();
@@ -658,37 +658,43 @@ macro_rules! defrel {
                 Stream::suspension(move || conj!($($g),*)(s))
             }
         }
-    }
+    };
+
+    // alternate syntax: separate goals with ;
+    ($name:ident($($args:ident),*) { $($g:expr);* $(;)? }) => {
+        defrel!{$name($($args),*) { $($g),* }}
+    };
 }
 
 #[macro_export]
 macro_rules! run {
-    (*, ($($x:ident),*) $body:tt) => {
-        run!(@ None, ($($x),*) $body)
+    (*, ($($x:ident),*), $($body:tt)*) => {
+        run!(@ None, ($($x),*), $($body)*)
     };
 
-    (*, $q:ident { $($g:expr;)* }) => {
-        run!(@ None, $q { $($g;)* })
+    (*, $q:ident, $($g:expr),* $(,)?) => {
+        run!(@ None, $q, $($g),*)
     };
 
-    ($n:expr, ($($x:ident),*) $body:tt) => {
-        run!(@ Some($n), ($($x),*) $body)
+    ($n:expr, ($($x:ident),*), $($body:tt)*) => {
+        run!(@ Some($n), ($($x),*), $($body)*)
     };
 
-    ($n:expr, $q:ident { $($g:expr;)* }) => {
-        run!(@ Some($n), $q { $($g;)* })
+    ($n:expr, $q:ident, $($g:expr),* $(,)?) => {
+        run!(@ Some($n), $q, $($g),*)
     };
 
-    (@ $n:expr, ($($x:ident),*) { $($g:expr;)* }) => {
-        run!(@ $n, q {
-            fresh!($($x),* {
-                eq(vec![$(Value::Var($x.clone())),*], q);
-                $($g;)*
-            });
+    (@ $n:expr, ($($x:ident),*), $($g:expr),* $(,)?) => {
+        run!(@ $n, q, {
+            fresh!(
+                ($($x),*),
+                eq(vec![$(Value::Var($x.clone())),*], q),
+                $($g),*
+            )
         })
     };
 
-    (@ $n:expr, $q:ident { $($g:expr;)* }) => {{
+    (@ $n:expr, $q:ident, $($g:expr),* $(,)?) => {{
         let $q = Var::new(stringify!($q));
         let var = Value::Var($q.clone());
         run_goal($n, conj!($($g),*)).map(reify(var))
@@ -697,7 +703,7 @@ macro_rules! run {
 
 #[macro_export]
 macro_rules! fresh {
-    ($($x:ident),* {$($g:expr;)*}) => {{
+    (($($x:ident),*), $($g:expr),* $(,)?) => {{
         $( let $x = Var::new(stringify!($x)); )*
         conj!($($g),*)
     }}
@@ -706,7 +712,7 @@ macro_rules! fresh {
 #[macro_export]
 macro_rules! conde {
     ( $($($g:expr),*);*) => {
-        disj!($(conj!( $($g),*)),*)
+        disj!($(conj!( $($g),*));*)
     }
 }
 
@@ -901,7 +907,7 @@ mod tests {
         );
 
         assert_eq!(
-            disj!(eq("virgin", &x), eq("olive", &x), eq("oil", &x))(Substitution::empty()),
+            disj!(eq("virgin", &x); eq("olive", &x); eq("oil", &x))(Substitution::empty()),
             Stream::from_iter(
                 vec![
                     substitution! {x: "virgin"},
@@ -914,7 +920,7 @@ mod tests {
 
         defrel! {
             teacup(t) {
-                disj!(eq("tea", t.clone()), eq("cup", t))
+                disj!(eq("tea", t.clone()); eq("cup", t))
             }
         }
 
@@ -926,18 +932,18 @@ mod tests {
         );
 
         assert_eq!(
-            format!("{:?}", fresh!(x, y { eq(x, y); })(Substitution::empty())),
+            format!("{:?}", fresh!((x, y), eq(x, y))(Substitution::empty())),
             "({x: y})"
         );
 
-        assert_eq!(run!(1, x {}), Stream::singleton(Value::RV(0)));
-        assert_eq!(run!(1, x { eq(x, 42); }), Stream::singleton(Value::new(42)));
+        assert_eq!(run!(1, x,), Stream::singleton(Value::RV(0)));
+        assert_eq!(run!(1, x, eq(x, 42)), Stream::singleton(Value::new(42)));
         assert_eq!(
-            run!(1, (x, y) { }),
+            run!(1, (x, y),),
             Stream::singleton(Value::new(vec![Value::RV(0), Value::RV(1)]))
         );
         assert_eq!(
-            run!(1, (x, y) { eq(x, 42); }),
+            run!(1, (x, y), eq(x, 42)),
             Stream::singleton(Value::new(vec![Value::new(42), Value::RV(0)]))
         );
 
@@ -948,38 +954,33 @@ mod tests {
         }
 
         assert_eq!(
-            run!(*, x { conso(1, 2, x); }),
+            run!(*, x, conso(1, 2, x)),
             Stream::singleton(Value::new(vec![Value::new(1), Value::new(2)]))
         );
         assert_eq!(
-            run!(*, x { conso(1, x, vec![Value::new(1), Value::new(2)]); }),
+            run!(*, x, conso(1, x, vec![Value::new(1), Value::new(2)])),
             Stream::singleton(Value::new(2))
         );
         assert_eq!(
-            run!(*, x { conso(x, 2, vec![Value::new(1), Value::new(2)]); }),
+            run!(*, x, conso(x, 2, vec![Value::new(1), Value::new(2)])),
             Stream::singleton(Value::new(1))
         );
         assert_eq!(
-            run!(*, x { conso(x.clone(), x, vec![Value::new(1), Value::new(2)]); }),
+            run!(*, x, conso(x.clone(), x, vec![Value::new(1), Value::new(2)])),
             Stream::empty()
         );
         assert_eq!(
-            run!(*, x { conso(x.clone(), x, vec![Value::new(3), Value::new(3)]); }),
+            run!(*, x, conso(x.clone(), x, vec![Value::new(3), Value::new(3)])),
             Stream::singleton(Value::new(3))
         );
 
         assert_eq!(
-            run!(5, q {
-                eq(q, "onion");
-            }),
+            run!(5, q, eq(q, "onion")),
             Stream::singleton(Value::new("onion"))
         );
 
         assert_eq!(
-            run!(5, q {
-                eq(q, "onion");
-                alwayso();
-            }),
+            run!(5, q, eq(q, "onion"), alwayso(),),
             Stream::from_iter(std::iter::repeat(Value::new("onion")).take(5))
         );
     }

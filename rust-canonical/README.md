@@ -12,4 +12,6 @@ The table below illustrates how to map from one to the other:
 
 | Scheme                     | Rust                        |
 | -------------------------- | --------------------------- |
-| `(run* q (== q 1))`        | `run!(*, q { eq(q, 1); })`  |
+| `(run* q (== q 1))`        | `run!(*, q, eq(q, 1))`      |
+| `(conj a b c)`             | `conj!(a, b, c)`            |
+| `(disj a b c)`             | `disj!(a; b; c)`            |
