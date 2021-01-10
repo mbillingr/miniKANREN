@@ -2,8 +2,8 @@ use std::any::Any;
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::fmt::Formatter;
-use std::hash::{Hash, Hasher};
 use std::rc::Rc;
+use crate::logic_variable::Var;
 
 #[derive(Clone)]
 pub enum Value {
@@ -38,30 +38,9 @@ impl Value {
     }
 }
 
-#[derive(Clone, Eq)]
-pub struct Var(Rc<String>);
-
 #[derive(Clone, PartialEq)]
 pub struct Substitution<'s> {
     subs: Cow<'s, HashMap<Var, Value>>,
-}
-
-impl Var {
-    pub fn new(name: impl Into<String>) -> Self {
-        Var(Rc::new(name.into()))
-    }
-}
-
-impl PartialEq for Var {
-    fn eq(&self, other: &Self) -> bool {
-        Rc::ptr_eq(&self.0, &other.0)
-    }
-}
-
-impl Hash for Var {
-    fn hash<H: Hasher>(&self, hasher: &mut H) {
-        (&*self.0 as *const String).hash(hasher)
-    }
 }
 
 impl From<Var> for Value {
@@ -521,7 +500,7 @@ pub fn conj2(
 }
 
 pub fn call_with_fresh_var<T: Fn(StatSubs) -> Stream<StatSubs>>(
-    name: impl Into<String>,
+    name: &'static str,
     f: impl Fn(Var) -> T,
 ) -> T {
     f(Var::new(name))
@@ -607,12 +586,6 @@ impl std::fmt::Debug for Value {
             Value::Val(val) => write!(f, "{:?}", val),
             Value::RV(n) => write!(f, "_{}", n),
         }
-    }
-}
-
-impl std::fmt::Debug for Var {
-    fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
-        write!(f, "{}", self.0)
     }
 }
 
