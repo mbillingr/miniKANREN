@@ -1,9 +1,9 @@
+use crate::logic_variable::Var;
 use std::any::Any;
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::fmt::Formatter;
 use std::rc::Rc;
-use crate::logic_variable::Var;
 
 #[derive(Clone)]
 pub enum Value {
@@ -26,6 +26,10 @@ impl PartialEq for Value {
 impl Value {
     pub fn new(val: impl Into<Value>) -> Self {
         val.into()
+    }
+
+    pub fn cons(car: impl Into<Value>, cdr: impl Into<Value>) -> Self {
+        Value::new((car.into(), cdr.into()))
     }
 
     fn ptr_eq(&self, other: &Self) -> bool {
@@ -170,6 +174,7 @@ impl<T: Structure> From<T> for Value {
 }
 
 pub trait Atomic: std::fmt::Debug {}
+impl Atomic for () {}
 impl Atomic for bool {}
 impl Atomic for u8 {}
 impl Atomic for u16 {}
@@ -283,34 +288,26 @@ impl Structure for Option<Value> {
     }
 }
 
-impl Structure for Vec<Value> {
+impl Structure for (Value, Value) {
     fn occurs<'s>(&self, x: &Var, s: &Substitution<'s>) -> bool {
-        self.iter().any(|v| s.occurs(x, v))
+        s.occurs(x, &self.0) || s.occurs(x, &self.1)
     }
 
-    fn unify<'s>(&self, v: &dyn Structure, mut s: Substitution<'s>) -> Option<Substitution<'s>> {
+    fn unify<'s>(&self, v: &dyn Structure, s: Substitution<'s>) -> Option<Substitution<'s>> {
         if let Some(other) = v.as_any().downcast_ref::<Self>() {
-            for (a, b) in self.iter().zip(other) {
-                s = s.unify(a, b)?;
-            }
-            Some(s)
+            s.unify(&self.0, &other.0)
+                .and_then(|s| s.unify(&self.1, &other.1))
         } else {
             None
         }
     }
 
     fn walk_star(self: Rc<Self>, s: &Substitution<'_>) -> Value {
-        self.iter()
-            .map(|v| s.walk_star(v))
-            .collect::<Vec<_>>()
-            .into()
+        (s.walk_star(&self.0), s.walk_star(&self.1)).into()
     }
 
-    fn reify_s<'s>(&self, mut s: Substitution<'s>) -> Substitution<'s> {
-        for v in self.iter() {
-            s = s.reify_s(v);
-        }
-        s
+    fn reify_s<'s>(&self, s: Substitution<'s>) -> Substitution<'s> {
+        s.reify_s(&self.0).reify_s(&self.1)
     }
 
     fn as_any(&self) -> &dyn Any {
@@ -603,6 +600,16 @@ impl std::fmt::Debug for Substitution<'_> {
     }
 }
 
+impl From<Vec<Value>> for Value {
+    fn from(items: Vec<Value>) -> Self {
+        let mut list = Value::from(());
+        for v in items.into_iter().rev() {
+            list = Value::cons(v, list);
+        }
+        list
+    }
+}
+
 #[macro_export]
 macro_rules! disj {
     () => { fail() };
@@ -744,11 +751,10 @@ mod tests {
         assert_eq!(walk(&w, &substitution! {x: y, v: x, w: x}), y);
 
         assert!(Substitution::empty().occurs(&x, &Value::Var(x.clone())));
-        assert!(substitution! {y: x}.occurs(&x, &Value::Val(Rc::new(vec![Value::Var(y.clone())]))));
-        assert!(!Substitution::empty()
-            .extend(x.clone(), Value::Val(Rc::new(vec![Value::Var(x.clone())]))));
-        assert!(!substitution! {y: x}
-            .extend(x.clone(), Value::Val(Rc::new(vec![Value::Var(y.clone())]))));
+        assert!(substitution! {y: x}.occurs(&x, &Value::cons(Value::Var(y), ())));
+        assert!(substitution! {y: x}.occurs(&x, &vec![Value::Var(y)].into()));
+        assert!(!Substitution::empty().extend(x.clone(), vec![Value::Var(x.clone())].into()));
+        assert!(!substitution! {y: x}.extend(x.clone(), vec![Value::Var(y.clone())].into()));
 
         assert_eq!(
             Substitution::empty().unify(
