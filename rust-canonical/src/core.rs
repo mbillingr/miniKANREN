@@ -1,4 +1,4 @@
-use crate::logic_variable::Var;
+use crate::logic_variable::{Var, ReifiedVar};
 use std::any::Any;
 use std::borrow::Cow;
 use std::collections::HashMap;
@@ -8,15 +8,12 @@ use std::rc::Rc;
 #[derive(Clone)]
 pub enum Value {
     Val(Rc<dyn Structure>),
-    RV(usize),
 }
 
 impl PartialEq for Value {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
             (Value::Val(a), Value::Val(b)) => Rc::ptr_eq(a, b) || a.eqv(&**b),
-            (Value::RV(a), Value::RV(b)) => a == b,
-            _ => false,
         }
     }
 }
@@ -37,7 +34,6 @@ impl Value {
     fn try_as_var(&self) -> Option<Var> {
         match self {
             Value::Val(v) => v.as_any().downcast_ref().copied(),
-            _ => None,
         }
     }
 }
@@ -51,7 +47,6 @@ impl PartialEq<Var> for Value {
     fn eq(&self, v: &Var) -> bool {
         match self {
             Value::Val(sv) => sv.as_any().downcast_ref::<Var>().map(|sv| sv == v).unwrap_or(false),
-            _ => false,
         }
     }
 }
@@ -73,13 +68,19 @@ impl<'s> Substitution<'s> {
     }
 
     fn walk_star(&self, v: &Value) -> Value {
-        let v = self.walk(v).clone();
+        let v = self.walk(v);
         if let Some(_) = v.try_as_var() {
-            v
+            v.clone()
         } else {
+
             match v {
-                Value::Val(val) => val.walk_star(self),
-                v => v,
+                Value::Val(val) => {
+                    if let Some(_) = val.as_any().downcast_ref::<ReifiedVar>() {
+                        v.clone()
+                    } else {
+                        val.clone().walk_star(self)
+                    }
+                },
             }
         }
     }
@@ -108,7 +109,6 @@ impl<'s> Substitution<'s> {
         } else {
             match v {
                 Value::Val(val) => val.occurs(x, self),
-                Value::RV(_) => false,
             }
         }
     }
@@ -141,7 +141,6 @@ impl<'s> Substitution<'s> {
                 let vval = vval.clone();
                 uval.unify(&*vval, self)
             }
-            _ => panic!("Cannot unify if there are reified variables"),
         }
     }
 
@@ -150,12 +149,11 @@ impl<'s> Substitution<'s> {
 
         if let Some(var) = v.try_as_var() {
             let var = var.clone();
-            let reified = Value::RV(self.subs.len());
+            let reified = Value::new(ReifiedVar(self.subs.len()));
             self.extended(var, reified).unwrap()
         } else {
             match v {
                 Value::Val(val) => val.clone().reify_s(self),
-                _ => self,
             }
         }
     }
@@ -207,7 +205,6 @@ impl<T: 'static + Atomic + PartialEq> PartialEq<T> for Value {
                 .downcast_ref::<T>()
                 .map(|x| x == other)
                 .unwrap_or(false),
-            _ => false,
         }
     }
 }
@@ -271,6 +268,32 @@ impl Structure for Var {
 
     fn eqv(&self, other: &dyn Structure) -> bool {
         other.as_any().downcast_ref::<Var>().map(|v| v == self).unwrap_or(false)
+    }
+}
+
+impl Structure for ReifiedVar {
+    fn occurs<'s>(&self, _x: &Var, _s: &Substitution<'s>) -> bool {
+        false
+    }
+
+    fn unify<'s>(&self, _v: &dyn Structure, _s: Substitution<'s>) -> Option<Substitution<'s>> {
+        unimplemented!()
+    }
+
+    fn walk_star(self: Rc<Self>, _: &Substitution<'_>) -> Value {
+        unimplemented!()
+    }
+
+    fn reify_s<'s>(&self, s: Substitution<'s>) -> Substitution<'s> {
+        s
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+
+    fn eqv(&self, other: &dyn Structure) -> bool {
+        other.as_any().downcast_ref::<ReifiedVar>().map(|v| v == self).unwrap_or(false)
     }
 }
 
@@ -613,7 +636,6 @@ impl std::fmt::Debug for Value {
     fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
         match self {
             Value::Val(val) => write!(f, "{:?}", val),
-            Value::RV(n) => write!(f, "_{}", n),
         }
     }
 }
@@ -891,11 +913,11 @@ mod tests {
         assert_eq!(
             reify((x).into())(s),
             Value::from(vec![
-                Value::RV(0),
-                Value::from(vec![Value::RV(1), Value::RV(0)]),
+                Value::from(ReifiedVar(0)),
+                Value::from(vec![Value::from(ReifiedVar(1)), Value::from(ReifiedVar(0))]),
                 Value::from("corn"),
-                Value::RV(2),
-                Value::from(vec![Value::from("ice"), Value::RV(2)])
+                Value::from(ReifiedVar(2)),
+                Value::from(vec![Value::from("ice"), Value::from(ReifiedVar(2))])
             ])
         );
 
@@ -947,15 +969,15 @@ mod tests {
             "({x: y})"
         );
 
-        assert_eq!(run!(1, x,), Stream::singleton(Value::RV(0)));
+        assert_eq!(run!(1, x,), Stream::singleton(Value::from(ReifiedVar(0))));
         assert_eq!(run!(1, x, eq(x, 42)), Stream::singleton(Value::new(42)));
         assert_eq!(
             run!(1, (x, y),),
-            Stream::singleton(Value::new(vec![Value::RV(0), Value::RV(1)]))
+            Stream::singleton(Value::new(vec![Value::from(ReifiedVar(0)), Value::from(ReifiedVar(1))]))
         );
         assert_eq!(
             run!(1, (x, y), eq(x, 42)),
-            Stream::singleton(Value::new(vec![Value::new(42), Value::RV(0)]))
+            Stream::singleton(Value::new(vec![Value::new(42), Value::from(ReifiedVar(0))]))
         );
 
         defrel! {

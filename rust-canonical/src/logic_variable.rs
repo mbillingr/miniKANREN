@@ -1,19 +1,5 @@
 use std::sync::atomic::{AtomicUsize, Ordering};
 
-pub trait MaybeVar {
-    fn try_as_var(&self) -> Option<Var>;
-
-    fn is_var(&self) -> bool {
-        self.try_as_var().is_some()
-    }
-}
-
-impl MaybeVar for Var {
-    fn try_as_var(&self) -> Option<Var> {
-        Some(*self)
-    }
-}
-
 static VAR_COUNTER: AtomicUsize = AtomicUsize::new(0);
 
 #[derive(Copy, Clone, PartialEq, Eq, Hash)]
@@ -43,6 +29,15 @@ impl From<&'static str> for Var {
 impl std::fmt::Debug for Var {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         write!(f, "{}", self.name)
+    }
+}
+
+#[derive(Copy, Clone, PartialEq, Eq)]
+pub struct ReifiedVar(pub usize);
+
+impl std::fmt::Debug for ReifiedVar {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(f, "_{}", self.0)
     }
 }
 
