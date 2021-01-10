@@ -13,4 +13,5 @@ categories = ["algorithms", "mathematics"]
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+downcast-rs = "1.2"
 

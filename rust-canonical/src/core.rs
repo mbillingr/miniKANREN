@@ -358,19 +358,19 @@ impl<T> Stream<T> {
         Stream::Empty
     }
 
-    pub fn singleton(x: T) -> Self {
+    pub fn singleton(x: impl Into<T>) -> Self {
         Stream::cons(x, Stream::Empty)
     }
 
-    pub fn cons(a: T, d: Self) -> Self {
-        Stream::Pair(a, Box::new(d))
+    pub fn cons(a: impl Into<T>, d: Self) -> Self {
+        Stream::Pair(a.into(), Box::new(d))
     }
 
     pub fn suspension(sup: impl 'static + FnOnce() -> Stream<T>) -> Self {
         Stream::Suspension(Box::new(sup))
     }
 
-    pub fn from_iter(mut iter: impl Iterator<Item = T>) -> Self {
+    pub fn from_iter<I: Into<T>>(mut iter: impl Iterator<Item = I>) -> Self {
         match iter.next() {
             None => Stream::Empty,
             Some(item) => Stream::cons(item, Stream::from_iter(iter)),
