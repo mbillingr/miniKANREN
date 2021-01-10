@@ -7,7 +7,6 @@ use std::rc::Rc;
 
 #[derive(Clone)]
 pub enum Value {
-    Var(Var),
     Val(Rc<dyn Structure>),
     RV(usize),
 }
@@ -15,7 +14,6 @@ pub enum Value {
 impl PartialEq for Value {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
-            (Value::Var(a), Value::Var(b)) => a == b,
             (Value::Val(a), Value::Val(b)) => Rc::ptr_eq(a, b) || a.eqv(&**b),
             (Value::RV(a), Value::RV(b)) => a == b,
             _ => false,
@@ -28,16 +26,18 @@ impl Value {
         val.into()
     }
 
+    pub fn var(v: Var) -> Self {
+        Value::new(v)
+    }
+
     pub fn cons(car: impl Into<Value>, cdr: impl Into<Value>) -> Self {
         Value::new((car.into(), cdr.into()))
     }
 
-    fn ptr_eq(&self, other: &Self) -> bool {
-        match (self, other) {
-            (Value::Var(a), Value::Var(b)) => a == b,
-            (Value::Val(a), Value::Val(b)) => Rc::ptr_eq(a, b),
-            (Value::RV(a), Value::RV(b)) => a == b,
-            _ => false,
+    fn try_as_var(&self) -> Option<Var> {
+        match self {
+            Value::Val(v) => v.as_any().downcast_ref().copied(),
+            _ => None,
         }
     }
 }
@@ -47,22 +47,10 @@ pub struct Substitution<'s> {
     subs: Cow<'s, HashMap<Var, Value>>,
 }
 
-impl From<Var> for Value {
-    fn from(v: Var) -> Value {
-        Value::Var(v)
-    }
-}
-
-impl From<&Var> for Value {
-    fn from(v: &Var) -> Value {
-        Value::Var(v.clone())
-    }
-}
-
 impl PartialEq<Var> for Value {
     fn eq(&self, v: &Var) -> bool {
         match self {
-            Value::Var(sv) => v == sv,
+            Value::Val(sv) => sv.as_any().downcast_ref::<Var>().map(|sv| sv == v).unwrap_or(false),
             _ => false,
         }
     }
@@ -76,8 +64,8 @@ impl<'s> Substitution<'s> {
     }
 
     fn walk<'a>(&'a self, v: &'a Value) -> &'a Value {
-        if let Value::Var(var) = v {
-            if let Some(next) = self.subs.get(var) {
+        if let Some(var) = v.try_as_var() {
+            if let Some(next) = self.subs.get(&var) {
                 return self.walk(next);
             }
         }
@@ -85,10 +73,14 @@ impl<'s> Substitution<'s> {
     }
 
     fn walk_star(&self, v: &Value) -> Value {
-        match self.walk(v).clone() {
-            Value::Var(var) => Value::Var(var),
-            Value::Val(val) => val.walk_star(self),
-            v => v,
+        let v = self.walk(v).clone();
+        if let Some(_) = v.try_as_var() {
+            v
+        } else {
+            match v {
+                Value::Val(val) => val.walk_star(self),
+                v => v,
+            }
         }
     }
 
@@ -111,28 +103,39 @@ impl<'s> Substitution<'s> {
 
     fn occurs(&self, x: &Var, v: &Value) -> bool {
         let v = self.walk(v);
-        match v {
-            Value::Var(var) => var == x,
-            Value::Val(val) => val.occurs(x, self),
-            Value::RV(_) => false,
+        if let Some(var) = v.try_as_var() {
+            &var == x
+        } else {
+            match v {
+                Value::Val(val) => val.occurs(x, self),
+                Value::RV(_) => false,
+            }
         }
     }
 
     fn unify(self, u: &Value, v: &Value) -> Option<Self> {
         let u = self.walk(u);
         let v = self.walk(v);
+
+        if let Some(u) = u.try_as_var() {
+            if let Some(v) = v.try_as_var() {
+                if u == v {
+                    return Some(self)
+                }
+            }
+        }
+
+        if let Some(u) = u.try_as_var() {
+            let v = v.clone();
+            return self.extended(u, v)
+        }
+
+        if let Some(v) = v.try_as_var() {
+            let u = u.clone();
+            return self.extended(v, u)
+        }
+
         match (u, v) {
-            (_, _) if u.ptr_eq(v) => Some(self),
-            (Value::Var(uvar), _) => {
-                let uvar = uvar.clone();
-                let v = v.clone();
-                self.extended(uvar, v)
-            }
-            (_, Value::Var(vvar)) => {
-                let u = u.clone();
-                let vvar = vvar.clone();
-                self.extended(vvar, u)
-            }
             (Value::Val(uval), Value::Val(vval)) => {
                 let uval = uval.clone();
                 let vval = vval.clone();
@@ -144,14 +147,16 @@ impl<'s> Substitution<'s> {
 
     fn reify_s(self, v: &Value) -> Self {
         let v = self.walk(v);
-        match v {
-            Value::Var(var) => {
-                let var = var.clone();
-                let reified = Value::RV(self.subs.len());
-                self.extended(var, reified).unwrap()
+
+        if let Some(var) = v.try_as_var() {
+            let var = var.clone();
+            let reified = Value::RV(self.subs.len());
+            self.extended(var, reified).unwrap()
+        } else {
+            match v {
+                Value::Val(val) => val.clone().reify_s(self),
+                _ => self,
             }
-            Value::Val(val) => val.clone().reify_s(self),
-            _ => self,
         }
     }
 }
@@ -238,6 +243,34 @@ impl<T: 'static + Atomic + PartialEq> Structure for T {
             .downcast_ref::<T>()
             .map(|o| o == self)
             .unwrap_or(false)
+    }
+}
+
+impl Structure for Var {
+    fn occurs<'s>(&self, _x: &Var, _s: &Substitution<'s>) -> bool {
+        //self == x
+        unimplemented!()
+    }
+
+    fn unify<'s>(&self, _v: &dyn Structure, _s: Substitution<'s>) -> Option<Substitution<'s>> {
+        // s.extended(*self, v)
+        unimplemented!()
+    }
+
+    fn walk_star(self: Rc<Self>, _: &Substitution<'_>) -> Value {
+        unimplemented!()
+    }
+
+    fn reify_s<'s>(&self, _s: Substitution<'s>) -> Substitution<'s> {
+        unimplemented!()
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+
+    fn eqv(&self, other: &dyn Structure) -> bool {
+        other.as_any().downcast_ref::<Var>().map(|v| v == self).unwrap_or(false)
     }
 }
 
@@ -579,7 +612,6 @@ impl<T: std::fmt::Debug> std::fmt::Debug for Stream<T> {
 impl std::fmt::Debug for Value {
     fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
         match self {
-            Value::Var(var) => write!(f, "{:?}", var),
             Value::Val(val) => write!(f, "{:?}", val),
             Value::RV(n) => write!(f, "_{}", n),
         }
@@ -668,7 +700,7 @@ macro_rules! run {
         run!(@ $n, q, {
             fresh!(
                 ($($x),*),
-                eq(vec![$(Value::Var($x.clone())),*], q),
+                eq(vec![$(Value::var($x.clone())),*], q),
                 $($g),*
             )
         })
@@ -676,7 +708,7 @@ macro_rules! run {
 
     (@ $n:expr, $q:ident, $($g:expr),* $(,)?) => {{
         let $q = Var::new(stringify!($q));
-        let var = Value::Var($q.clone());
+        let var = Value::var($q.clone());
         run_goal($n, conj!($($g),*)).map(reify(var))
     }};
 }
@@ -717,7 +749,7 @@ mod tests {
     use super::*;
 
     fn walk<'s>(v: &Var, s: &'s Substitution) -> Value {
-        s.walk(&Value::Var(v.clone())).clone()
+        s.walk(&Value::var(v.clone())).clone()
     }
 
     macro_rules! substitution {
@@ -750,16 +782,16 @@ mod tests {
         assert_eq!(walk(&v, &substitution! {x: y, v: x, w: x}), y);
         assert_eq!(walk(&w, &substitution! {x: y, v: x, w: x}), y);
 
-        assert!(Substitution::empty().occurs(&x, &Value::Var(x.clone())));
-        assert!(substitution! {y: x}.occurs(&x, &Value::cons(Value::Var(y), ())));
-        assert!(substitution! {y: x}.occurs(&x, &vec![Value::Var(y)].into()));
-        assert!(!Substitution::empty().extend(x.clone(), vec![Value::Var(x.clone())].into()));
-        assert!(!substitution! {y: x}.extend(x.clone(), vec![Value::Var(y.clone())].into()));
+        assert!(Substitution::empty().occurs(&x, &Value::var(x.clone())));
+        assert!(substitution! {y: x}.occurs(&x, &Value::cons(Value::var(y), ())));
+        assert!(substitution! {y: x}.occurs(&x, &vec![Value::var(y)].into()));
+        assert!(!Substitution::empty().extend(x.clone(), vec![Value::var(x.clone())].into()));
+        assert!(!substitution! {y: x}.extend(x.clone(), vec![Value::var(y.clone())].into()));
 
         assert_eq!(
             Substitution::empty().unify(
-                &Value::Val(Rc::new(Some(Value::Var(x.clone())))),
-                &Value::Val(Rc::new(Some(Value::Var(y.clone()))))
+                &Value::Val(Rc::new(Some(Value::var(x.clone())))),
+                &Value::Val(Rc::new(Some(Value::var(y.clone()))))
             ),
             Some(substitution!(x: y)),
         );
@@ -767,23 +799,23 @@ mod tests {
         assert_eq!(
             Substitution::empty()
                 .unify(
-                    &Value::Val(Rc::new(Some(Value::Var(x.clone())))),
-                    &Value::Val(Rc::new(Some(Value::Var(y.clone()))))
+                    &Value::Val(Rc::new(Some(Value::var(x.clone())))),
+                    &Value::Val(Rc::new(Some(Value::var(y.clone()))))
                 )
                 .unwrap()
                 .unify(
-                    &Value::Val(Rc::new(Some(Value::Var(x.clone())))),
+                    &Value::Val(Rc::new(Some(Value::var(x.clone())))),
                     &Value::Val(Rc::new(Some(Value::Val(Rc::new(42)))))
                 ),
             Some(substitution!(x: y, y: 42)),
         );
 
         assert_eq!(
-            eq(&x, Value::Var(u.clone()))(Substitution::empty()),
+            eq(x, Value::var(u.clone()))(Substitution::empty()),
             Stream::singleton(substitution!(x: u))
         );
         assert_eq!(
-            eq(&x, 42)(Substitution::empty()),
+            eq(x, 42)(Substitution::empty()),
             Stream::singleton(substitution!(x: 42))
         );
         assert_eq!(
@@ -795,12 +827,12 @@ mod tests {
         assert_eq!(fail()(Substitution::empty()), Stream::Empty);
         assert_eq!(eq(true, false)(Substitution::empty()), Stream::Empty);
         assert_eq!(
-            eq(&x, &y)(Substitution::empty()),
+            eq(x, y)(Substitution::empty()),
             Stream::singleton(substitution! {x: y})
         );
 
         assert_eq!(
-            disj2(eq("olive", &x), eq("oil", &x))(Substitution::empty()),
+            disj2(eq("olive", x), eq("oil", x))(Substitution::empty()),
             Stream::cons(
                 substitution! {x: "olive"},
                 Stream::cons(substitution! {x: "oil"}, Stream::empty())
@@ -823,41 +855,41 @@ mod tests {
         );
 
         assert_eq!(
-            disj2(eq("olive", &x), eq("oil", &x))(Substitution::empty())
+            disj2(eq("olive", x), eq("oil", x))(Substitution::empty())
                 .take_inf(5)
                 .len(),
             Some(2)
         );
 
         assert_eq!(
-            conj2(eq("olive", &x), eq("oil", x.clone()))(Substitution::empty()),
+            conj2(eq("olive", x), eq("oil", x))(Substitution::empty()),
             Stream::empty()
         );
 
         assert_eq!(
-            conj2(eq("olive", &x), eq(y.clone(), x.clone()))(Substitution::empty()),
+            conj2(eq("olive", x), eq(y.clone(), x.clone()))(Substitution::empty()),
             Stream::singleton(substitution! {y: "olive", x: "olive"})
         );
 
         assert_eq!(
-            substitution! {x: "b", z: y, w: vec![Value::from(&x), "e".into(), (&z).into()]}
+            substitution! {x: "b", z: y, w: vec![Value::from(x), "e".into(), (z).into()]}
                 .walk_star(&w.clone().into()),
             Value::from(vec![Value::from("b"), "e".into(), y.clone().into()])
         );
 
         let a1 = Value::from(vec![
-            Value::from(&u),
-            Value::from(&w),
-            Value::from(&y),
-            Value::from(&z),
-            Value::from(Some(Value::from(vec![Value::from("ice"), Value::from(&z)]))),
+            Value::from(u),
+            Value::from(w),
+            Value::from(y),
+            Value::from(z),
+            Value::from(Some(Value::from(vec![Value::from("ice"), Value::from(z)]))),
         ]);
         let a2 = Value::from("corn");
-        let a3 = Value::from(vec![Value::from(&v), Value::from(&u)]);
+        let a3 = Value::from(vec![Value::from(v), Value::from(u)]);
         let s = substitution! {x: a1, y: a2, w: a3};
         //println!("{:?}", reify((&x).into())(s));
         assert_eq!(
-            reify((&x).into())(s),
+            reify((x).into())(s),
             Value::from(vec![
                 Value::RV(0),
                 Value::from(vec![Value::RV(1), Value::RV(0)]),
@@ -868,9 +900,9 @@ mod tests {
         );
 
         assert_eq!(
-            run_goal(Some(5), disj2(eq("olive", &x), eq("oil", &x)))
+            run_goal(Some(5), disj2(eq("olive", x), eq("oil", x)))
                 .into_iter()
-                .map(|s| reify((&x).into())(s))
+                .map(|s| reify((x).into())(s))
                 .collect::<Vec<_>>(),
             vec![Value::from("olive"), Value::from("oil")],
         );
@@ -886,7 +918,7 @@ mod tests {
         );
 
         assert_eq!(
-            disj!(eq("virgin", &x); eq("olive", &x); eq("oil", &x))(Substitution::empty()),
+            disj!(eq("virgin", x); eq("olive", x); eq("oil", x))(Substitution::empty()),
             Stream::from_iter(
                 vec![
                     substitution! {x: "virgin"},
