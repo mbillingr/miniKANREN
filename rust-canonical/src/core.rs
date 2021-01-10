@@ -1,20 +1,16 @@
-use crate::logic_variable::{Var, ReifiedVar};
+use crate::logic_variable::{ReifiedVar, Var};
 use std::any::Any;
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::fmt::Formatter;
-use std::rc::Rc;
+use std::sync::Arc;
 
 #[derive(Clone)]
-pub enum Value {
-    Val(Rc<dyn Structure>),
-}
+pub struct Value(Arc<dyn Structure>);
 
 impl PartialEq for Value {
     fn eq(&self, other: &Self) -> bool {
-        match (self, other) {
-            (Value::Val(a), Value::Val(b)) => Rc::ptr_eq(a, b) || a.eqv(&**b),
-        }
+        Arc::ptr_eq(&self.0, &other.0) || self.0.eqv(&*other.0)
     }
 }
 
@@ -32,9 +28,7 @@ impl Value {
     }
 
     fn try_as_var(&self) -> Option<Var> {
-        match self {
-            Value::Val(v) => v.as_any().downcast_ref().copied(),
-        }
+        self.0.as_any().downcast_ref().copied()
     }
 }
 
@@ -45,9 +39,11 @@ pub struct Substitution<'s> {
 
 impl PartialEq<Var> for Value {
     fn eq(&self, v: &Var) -> bool {
-        match self {
-            Value::Val(sv) => sv.as_any().downcast_ref::<Var>().map(|sv| sv == v).unwrap_or(false),
-        }
+        self.0
+            .as_any()
+            .downcast_ref::<Var>()
+            .map(|sv| sv == v)
+            .unwrap_or(false)
     }
 }
 
@@ -72,15 +68,10 @@ impl<'s> Substitution<'s> {
         if let Some(_) = v.try_as_var() {
             v.clone()
         } else {
-
-            match v {
-                Value::Val(val) => {
-                    if let Some(_) = val.as_any().downcast_ref::<ReifiedVar>() {
-                        v.clone()
-                    } else {
-                        val.clone().walk_star(self)
-                    }
-                },
+            if let Some(_) = v.0.as_any().downcast_ref::<ReifiedVar>() {
+                v.clone()
+            } else {
+                v.0.clone().walk_star(self)
             }
         }
     }
@@ -107,9 +98,7 @@ impl<'s> Substitution<'s> {
         if let Some(var) = v.try_as_var() {
             &var == x
         } else {
-            match v {
-                Value::Val(val) => val.occurs(x, self),
-            }
+            v.0.occurs(x, self)
         }
     }
 
@@ -120,28 +109,24 @@ impl<'s> Substitution<'s> {
         if let Some(u) = u.try_as_var() {
             if let Some(v) = v.try_as_var() {
                 if u == v {
-                    return Some(self)
+                    return Some(self);
                 }
             }
         }
 
         if let Some(u) = u.try_as_var() {
             let v = v.clone();
-            return self.extended(u, v)
+            return self.extended(u, v);
         }
 
         if let Some(v) = v.try_as_var() {
             let u = u.clone();
-            return self.extended(v, u)
+            return self.extended(v, u);
         }
 
-        match (u, v) {
-            (Value::Val(uval), Value::Val(vval)) => {
-                let uval = uval.clone();
-                let vval = vval.clone();
-                uval.unify(&*vval, self)
-            }
-        }
+        let uval = u.0.clone();
+        let vval = v.0.clone();
+        uval.unify(&*vval, self)
     }
 
     fn reify_s(self, v: &Value) -> Self {
@@ -152,9 +137,7 @@ impl<'s> Substitution<'s> {
             let reified = Value::new(ReifiedVar(self.subs.len()));
             self.extended(var, reified).unwrap()
         } else {
-            match v {
-                Value::Val(val) => val.clone().reify_s(self),
-            }
+            v.0.clone().reify_s(self)
         }
     }
 }
@@ -162,7 +145,7 @@ impl<'s> Substitution<'s> {
 pub trait Structure: std::any::Any + std::fmt::Debug {
     fn occurs<'s>(&self, x: &Var, s: &Substitution<'s>) -> bool;
     fn unify<'s>(&self, v: &dyn Structure, s: Substitution<'s>) -> Option<Substitution<'s>>;
-    fn walk_star(self: Rc<Self>, s: &Substitution<'_>) -> Value;
+    fn walk_star(self: Arc<Self>, s: &Substitution<'_>) -> Value;
     fn reify_s<'s>(&self, s: Substitution<'s>) -> Substitution<'s>;
 
     fn as_any(&self) -> &dyn Any;
@@ -172,7 +155,7 @@ pub trait Structure: std::any::Any + std::fmt::Debug {
 
 impl<T: Structure> From<T> for Value {
     fn from(v: T) -> Self {
-        Value::Val(Rc::new(v))
+        Value(Arc::new(v))
     }
 }
 
@@ -195,17 +178,15 @@ impl Atomic for f32 {}
 impl Atomic for String {}
 impl Atomic for &str {}
 impl<T: Atomic> Atomic for Box<T> {}
-impl<T: Atomic> Atomic for Rc<T> {}
+impl<T: Atomic> Atomic for Arc<T> {}
 
 impl<T: 'static + Atomic + PartialEq> PartialEq<T> for Value {
     fn eq(&self, other: &T) -> bool {
-        match self {
-            Value::Val(val) => val
-                .as_any()
-                .downcast_ref::<T>()
-                .map(|x| x == other)
-                .unwrap_or(false),
-        }
+        self.0
+            .as_any()
+            .downcast_ref::<T>()
+            .map(|x| x == other)
+            .unwrap_or(false)
     }
 }
 
@@ -222,8 +203,8 @@ impl<T: 'static + Atomic + PartialEq> Structure for T {
         }
     }
 
-    fn walk_star(self: Rc<Self>, _: &Substitution<'_>) -> Value {
-        Value::Val(self)
+    fn walk_star(self: Arc<Self>, _: &Substitution<'_>) -> Value {
+        Value(self)
     }
 
     fn reify_s<'s>(&self, s: Substitution<'s>) -> Substitution<'s> {
@@ -254,7 +235,7 @@ impl Structure for Var {
         unimplemented!()
     }
 
-    fn walk_star(self: Rc<Self>, _: &Substitution<'_>) -> Value {
+    fn walk_star(self: Arc<Self>, _: &Substitution<'_>) -> Value {
         unimplemented!()
     }
 
@@ -267,7 +248,11 @@ impl Structure for Var {
     }
 
     fn eqv(&self, other: &dyn Structure) -> bool {
-        other.as_any().downcast_ref::<Var>().map(|v| v == self).unwrap_or(false)
+        other
+            .as_any()
+            .downcast_ref::<Var>()
+            .map(|v| v == self)
+            .unwrap_or(false)
     }
 }
 
@@ -280,7 +265,7 @@ impl Structure for ReifiedVar {
         unimplemented!()
     }
 
-    fn walk_star(self: Rc<Self>, _: &Substitution<'_>) -> Value {
+    fn walk_star(self: Arc<Self>, _: &Substitution<'_>) -> Value {
         unimplemented!()
     }
 
@@ -293,7 +278,11 @@ impl Structure for ReifiedVar {
     }
 
     fn eqv(&self, other: &dyn Structure) -> bool {
-        other.as_any().downcast_ref::<ReifiedVar>().map(|v| v == self).unwrap_or(false)
+        other
+            .as_any()
+            .downcast_ref::<ReifiedVar>()
+            .map(|v| v == self)
+            .unwrap_or(false)
     }
 }
 
@@ -317,9 +306,9 @@ impl Structure for Option<Value> {
         }
     }
 
-    fn walk_star(self: Rc<Self>, s: &Substitution<'_>) -> Value {
+    fn walk_star(self: Arc<Self>, s: &Substitution<'_>) -> Value {
         match &*self {
-            None => Value::Val(self),
+            None => Value(self),
             Some(v) => s.walk_star(v),
         }
     }
@@ -358,7 +347,7 @@ impl Structure for (Value, Value) {
         }
     }
 
-    fn walk_star(self: Rc<Self>, s: &Substitution<'_>) -> Value {
+    fn walk_star(self: Arc<Self>, s: &Substitution<'_>) -> Value {
         (s.walk_star(&self.0), s.walk_star(&self.1)).into()
     }
 
@@ -482,7 +471,7 @@ impl<T: 'static> Stream<T> {
         }
     }
 
-    fn append_map_inf(self, g: Rc<dyn Fn(T) -> Self>) -> Self {
+    fn append_map_inf(self, g: Arc<dyn Fn(T) -> Self>) -> Self {
         match self {
             Stream::Empty => Stream::Empty,
             Stream::Pair(a, d) => Stream::append_inf(g(a), d.append_map_inf(g)),
@@ -548,7 +537,7 @@ pub fn conj2(
     g1: impl Fn(StatSubs) -> Stream<StatSubs>,
     g2: impl 'static + Fn(StatSubs) -> Stream<StatSubs>,
 ) -> impl Fn(StatSubs) -> Stream<StatSubs> {
-    let g2 = Rc::new(g2);
+    let g2 = Arc::new(g2);
     move |s| g1(s).append_map_inf(g2.clone())
 }
 
@@ -579,7 +568,7 @@ pub fn ifte(
     g2: impl 'static + Fn(StatSubs) -> Stream<StatSubs>,
     g3: impl Fn(StatSubs) -> Stream<StatSubs>,
 ) -> impl Fn(StatSubs) -> Stream<StatSubs> {
-    let g2 = Rc::new(g2);
+    let g2 = Arc::new(g2);
     move |s| {
         let mut s_inf = g1(s.clone());
         loop {
@@ -634,9 +623,7 @@ impl<T: std::fmt::Debug> std::fmt::Debug for Stream<T> {
 
 impl std::fmt::Debug for Value {
     fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
-        match self {
-            Value::Val(val) => write!(f, "{:?}", val),
-        }
+        write!(f, "{:?}", self.0)
     }
 }
 
@@ -812,8 +799,8 @@ mod tests {
 
         assert_eq!(
             Substitution::empty().unify(
-                &Value::Val(Rc::new(Some(Value::var(x.clone())))),
-                &Value::Val(Rc::new(Some(Value::var(y.clone()))))
+                &Value::new(Some(Value::var(x.clone()))),
+                &Value::new(Some(Value::var(y.clone())))
             ),
             Some(substitution!(x: y)),
         );
@@ -821,13 +808,13 @@ mod tests {
         assert_eq!(
             Substitution::empty()
                 .unify(
-                    &Value::Val(Rc::new(Some(Value::var(x.clone())))),
-                    &Value::Val(Rc::new(Some(Value::var(y.clone()))))
+                    &Value::new(Some(Value::var(x.clone()))),
+                    &Value::new(Some(Value::var(y.clone())))
                 )
                 .unwrap()
                 .unify(
-                    &Value::Val(Rc::new(Some(Value::var(x.clone())))),
-                    &Value::Val(Rc::new(Some(Value::Val(Rc::new(42)))))
+                    &Value::new(Some(Value::var(x.clone()))),
+                    &Value::new(Some(Value::new(42)))
                 ),
             Some(substitution!(x: y, y: 42)),
         );
@@ -973,7 +960,10 @@ mod tests {
         assert_eq!(run!(1, x, eq(x, 42)), Stream::singleton(Value::new(42)));
         assert_eq!(
             run!(1, (x, y),),
-            Stream::singleton(Value::new(vec![Value::from(ReifiedVar(0)), Value::from(ReifiedVar(1))]))
+            Stream::singleton(Value::new(vec![
+                Value::from(ReifiedVar(0)),
+                Value::from(ReifiedVar(1))
+            ]))
         );
         assert_eq!(
             run!(1, (x, y), eq(x, 42)),
