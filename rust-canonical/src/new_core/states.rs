@@ -1,7 +1,4 @@
-use super::{
-    logic_variables::{MaybeVar, Var},
-    value::{MaybePair, Value},
-};
+use super::{logic_variables::Var, object::Object};
 use std::collections::HashMap;
 
 pub struct State {}
@@ -18,7 +15,7 @@ impl State {
 
 #[derive(Debug)]
 pub struct Substitution {
-    associations: HashMap<Var, Box<dyn Value>>,
+    associations: HashMap<Var, Object>,
 }
 
 impl Substitution {
@@ -32,17 +29,18 @@ impl Substitution {
         self.associations.is_empty()
     }
 
-    pub fn extend(&mut self, x: impl Into<Var>, v: impl Value) -> bool {
+    pub fn extend(&mut self, x: impl Into<Var>, v: impl Into<Object>) -> bool {
         let x = x.into();
+        let v = v.into();
         if self.occurs(&x, &v) {
             false
         } else {
-            self.associations.insert(x, Box::new(v));
+            self.associations.insert(x, v);
             true
         }
     }
 
-    pub fn occurs(&self, x: &Var, t: &dyn Value) -> bool {
+    pub fn occurs(&self, x: &Var, t: &Object) -> bool {
         if let Some(p) = t.try_as_pair() {
             self.occurs(x, self.walk(p.0)) || self.occurs(x, self.walk(p.1))
         } else if let Some(v) = t.try_as_var() {
@@ -52,43 +50,54 @@ impl Substitution {
         }
     }
 
-    pub fn walk<'b>(&'b self, t: &'b dyn Value) -> &'b dyn Value {
+    pub fn walk<'a>(&'a self, t: &'a Object) -> &'a Object {
         t.try_as_var()
             .and_then(|t| self.associations.get(&t))
-            .map(|v| self.walk(&**v))
+            .map(|v| self.walk(v))
             .unwrap_or(t)
     }
 
-    pub fn unify(&mut self, u: &dyn Value, v: &dyn Value) -> bool {
+    pub fn unify(&mut self, u: &Object, v: &Object) -> bool {
         if let Some(u) = u.try_as_var() {
             if let Some(v) = v.try_as_var() {
                 if u == v {
-                    return true
+                    return true;
                 }
             }
         }
 
         if let Some(u) = u.try_as_var() {
-            return self.extend(u, v)
+            return self.extend(u, v.clone());
         }
 
         if let Some(v) = v.try_as_var() {
-            return self.extend(v, u)
+            return self.extend(v, u.clone());
         }
 
         if let Some((caru, cdru)) = u.try_as_pair() {
             if let Some((carv, cdrv)) = v.try_as_pair() {
-                return self.unify(caru, carv) && self.unify(cdru, cdrv)
+                return self.unify(caru, carv) && self.unify(cdru, cdrv);
             }
         }
 
-        u.is_equal(&v)
+        u.is_equal(&**v)
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use super::super::{
+        logic_variables::MaybeVar,
+        object::{MaybePair, Value},
+    };
     use super::*;
+
+    pub fn obj(val: impl Value) -> Object {
+        Object::new(val)
+    }
+    pub fn cons(car: impl Value, cdr: impl Value) -> Object {
+        obj((obj(car), obj(cdr)))
+    }
 
     impl Value for i64 {
         fn is_equal(&self, other: &dyn Value) -> bool {
@@ -104,7 +113,7 @@ mod tests {
         }
     }
     impl MaybePair for i64 {
-        fn try_as_pair(&self) -> Option<(&dyn Value, &dyn Value)> {
+        fn try_as_pair(&self) -> Option<(&Object, &Object)> {
             None
         }
     }
@@ -124,7 +133,7 @@ mod tests {
     #[test]
     fn can_extend_substitution() {
         let mut sub = Substitution::new();
-        assert!(sub.extend("x", 1));
+        assert!(sub.extend("x", obj(1)));
         assert!(!sub.is_empty());
     }
 
@@ -132,21 +141,21 @@ mod tests {
     fn nothing_occurs_in_empty_substitution() {
         let sub = Substitution::new();
         let var = Var::fresh("x");
-        assert!(!sub.occurs(&var, &1))
+        assert!(!sub.occurs(&var, &obj(1)))
     }
 
     #[test]
     fn same_variable_occurs_even_in_empty_substitution() {
         let sub = Substitution::new();
         let var = Var::fresh("x");
-        assert!(sub.occurs(&var, &var))
+        assert!(sub.occurs(&var, &obj(var)))
     }
 
     #[test]
     fn same_variable_in_car_occurs_even_in_empty_substitution() {
         let sub = Substitution::new();
         let var = Var::fresh("x");
-        let pair = (var, 0);
+        let pair = cons(var, 0);
         assert!(sub.occurs(&var, &pair))
     }
 
@@ -154,7 +163,7 @@ mod tests {
     fn same_variable_in_cdr_occurs_even_in_empty_substitution() {
         let sub = Substitution::new();
         let var = Var::fresh("x");
-        let pair = (0, var);
+        let pair = cons(0, var);
         assert!(sub.occurs(&var, &pair))
     }
 
@@ -162,7 +171,7 @@ mod tests {
     fn cannnot_create_obvious_substitution_cycles() {
         let mut sub = Substitution::new();
         let var = Var::fresh("x");
-        assert!(!sub.extend(var, var));
+        assert!(!sub.extend(var, obj(var)));
         assert!(sub.is_empty())
     }
 
@@ -171,22 +180,22 @@ mod tests {
         let mut sub = Substitution::new();
         let x = Var::fresh("x");
         let y = Var::fresh("y");
-        sub.extend(x, y);
-        assert!(!sub.extend(y, (x, 0)));
-        assert!(!sub.extend(y, (0, x)));
+        sub.extend(x, obj(y));
+        assert!(!sub.extend(y, cons(x, 0)));
+        assert!(!sub.extend(y, cons(0, x)));
     }
 
     #[test]
     fn cannot_unify_different_values() {
         let mut sub = Substitution::new();
-        assert!(!sub.unify(&1, &2));
+        assert!(!sub.unify(&obj(1), &obj(2)));
         assert!(sub.is_empty());
     }
 
     #[test]
     fn unifying_equal_values_does_not_modify_substitution() {
         let mut sub = Substitution::new();
-        assert!(sub.unify(&1, &1));
+        assert!(sub.unify(&obj(1), &obj(1)));
         assert!(sub.is_empty());
     }
 
@@ -194,7 +203,7 @@ mod tests {
     fn unifying_same_variable_does_not_modify_substitution() {
         let mut sub = Substitution::new();
         let var = Var::fresh("x");
-        assert!(sub.unify(&var, &var));
+        assert!(sub.unify(&obj(var), &obj(var)));
         assert!(sub.is_empty());
     }
 
@@ -203,12 +212,12 @@ mod tests {
         let mut sub = Substitution::new();
         let var = Var::fresh("x");
 
-        assert!(sub.unify(&var, &1));
-        assert_eq!(sub.walk(&var), v(&1));
+        assert!(sub.unify(&obj(var), &obj(1)));
+        assert_eq!(sub.walk(&obj(var)), &obj(1));
 
         let mut sub = Substitution::new();
-        assert!(sub.unify(&1, &var));
-        assert_eq!(sub.walk(&var), v(&1));
+        assert!(sub.unify(&obj(1), &obj(var)));
+        assert_eq!(sub.walk(&obj(var)), &obj(1));
     }
 
     #[test]
@@ -216,12 +225,8 @@ mod tests {
         let mut sub = Substitution::new();
         let x = Var::fresh("x");
         let y = Var::fresh("y");
-        assert!(sub.unify(&(x, 1), &(2, y)));
-        assert_eq!(sub.walk(&x), v(&2));
-        assert_eq!(sub.walk(&y), v(&1));
-    }
-
-    fn v(x: &impl Value) -> &dyn Value {
-        x
+        assert!(sub.unify(&cons(x, 1), &cons(2, y)));
+        assert_eq!(sub.walk(&obj(x)), &obj(2));
+        assert_eq!(sub.walk(&obj(y)), &obj(1));
     }
 }

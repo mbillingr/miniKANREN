@@ -195,6 +195,7 @@ impl<T: Structure> From<T> for Value {
 }
 
 pub trait Atomic: std::fmt::Debug {}
+impl Atomic for () {}
 impl Atomic for bool {}
 impl Atomic for u8 {}
 impl Atomic for u16 {}
@@ -994,5 +995,68 @@ mod tests {
             .collect::<Vec<_>>(),
             vec![Value::new("onion"); 5]
         );
+
+        defrel! {
+            nullo(x) {
+                eq(x, ())
+            }
+        }
+
+        defrel! {
+            cdro(p, d) {
+                fresh!(a {
+                    eq(vec![Value::from(a), d], p);
+                })
+            }
+        }
+
+        defrel! {
+            listo(l) {
+                conde! {
+                    nullo(l);
+                    fresh!(d {
+                        cdro(l, d);
+                        listo(d);
+                    })
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn sudoku() {
+        fn vector<'a>(x: Var, n: usize) -> impl Goal<'a>{
+            let vec: Vec<_> = (0..n).map(|_| Value::from(Var::new("v"))).collect();
+            eq(x, vec)
+        }
+
+        fn any_vector<'a>(x: Var) -> impl Goal<'a>{
+            move |s: Substitution<'a>| {
+                let x = x.clone();
+                interleave_flatten((0..).map(move |n| {
+                    vector(x.clone(), n).run(s.clone())
+                }))
+            }
+        }
+
+        fn vec_ref<'a>(v: Value, i: usize, x: Value) -> impl Goal<'a> {
+            move |s: Substitution<'a>| {
+                let x = x.clone();
+                let v = v.clone();
+                interleave_flatten((i+1..).map(move |n| {
+                    let mut vec: Vec<_> = (0..n).map(|_| Value::from(Var::new("v"))).collect();
+                    vec[i] = x.clone();
+                    eq(v.clone(), vec).run(s.clone())
+                }))
+            }
+        }
+
+        println!("{:?}", run!(5, z {
+            fresh!(x {
+                vec_ref(z.clone().into(), 1, "abc".into());
+                vec_ref(z.clone().into(), 2, "xyz".into());
+                //vec_ref(z.into(), 1, x.into());
+            });
+        }).collect::<Vec<_>>());
     }
 }
