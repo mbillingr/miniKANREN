@@ -3,7 +3,7 @@ pub use crate::{
         logic_variable::{ReifiedVar, Var},
         value::Value,
     },
-    goals::{StatSubs, primitive::*},
+    goals::{primitive::*, StatSubs},
 };
 
 #[macro_export]
@@ -22,6 +22,20 @@ macro_rules! conj {
 
 #[macro_export]
 macro_rules! defrel {
+    (pub $name:ident($($args:ident),*) { $($g:expr),* $(,)? }) => {
+        pub fn $name($($args: impl 'static + Into<Value>),*) -> impl Fn(StatSubs) -> Stream<StatSubs> {
+            $(
+                let $args = $args.into();
+            )*
+            move |s| {
+                $(
+                    let $args = $args.clone();
+                )*
+                Stream::suspension(move || conj!($($g),*)(s))
+            }
+        }
+    };
+
     ($name:ident($($args:ident),*) { $($g:expr),* $(,)? }) => {
         fn $name($($args: impl 'static + Into<Value>),*) -> impl Fn(StatSubs) -> Stream<StatSubs> {
             $(
@@ -34,6 +48,11 @@ macro_rules! defrel {
                 Stream::suspension(move || conj!($($g),*)(s))
             }
         }
+    };
+
+    // alternate syntax: separate goals with ;
+    (pub $name:ident($($args:ident),*) { $($g:expr);* $(;)? }) => {
+        defrel!{pub $name($($args),*) { $($g),* }}
     };
 
     // alternate syntax: separate goals with ;

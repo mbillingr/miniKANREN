@@ -63,6 +63,10 @@ impl<T> Stream<T> {
             Stream::Suspension(sup) => sup().take_inf_all(),
         }
     }
+
+    pub fn into_vec(self) -> Vec<T> {
+        self.into_iter().collect()
+    }
 }
 
 impl<T> std::iter::IntoIterator for Stream<T> {

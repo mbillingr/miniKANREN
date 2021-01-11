@@ -1,4 +1,4 @@
-use crate::core::logic_variable::Var;
+use crate::core::logic_variable::{ReifiedVar, Var};
 use crate::core::structure::{Atomic, Structure};
 use crate::core::substitution::Substitution;
 use std::fmt::Formatter;
@@ -24,6 +24,9 @@ impl Value {
 
     pub fn var(v: Var) -> Self {
         Value::new(v)
+    }
+    pub fn rv(i: usize) -> Self {
+        Value::new(ReifiedVar(i))
     }
 
     pub fn cons(car: impl Into<Value>, cdr: impl Into<Value>) -> Self {
