@@ -1,4 +1,5 @@
-use crate::core::{Atomic, Structure, Substitution};
+use crate::core::structure::{Atomic, Structure};
+use crate::core::substitution::Substitution;
 use crate::logic_variable::Var;
 use std::fmt::Formatter;
 use std::sync::Arc;

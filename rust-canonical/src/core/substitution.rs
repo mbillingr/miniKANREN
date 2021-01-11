@@ -1,5 +1,5 @@
 use super::value::Value;
-use super::Structure;
+use crate::core::structure::Structure;
 use crate::logic_variable::Var;
 use std::borrow::Cow;
 use std::collections::HashMap;
