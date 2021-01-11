@@ -1,54 +1,16 @@
+pub mod value;
+
 use crate::logic_variable::{ReifiedVar, Var};
 use std::any::Any;
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::fmt::Formatter;
 use std::sync::Arc;
-
-#[derive(Clone)]
-pub struct Value(Arc<dyn Structure>);
-
-impl PartialEq for Value {
-    fn eq(&self, other: &Self) -> bool {
-        Arc::ptr_eq(&self.0, &other.0) || self.0.eqv(&other)
-    }
-}
-
-impl Value {
-    pub fn new(val: impl Into<Value>) -> Self {
-        val.into()
-    }
-
-    pub fn var(v: Var) -> Self {
-        Value::new(v)
-    }
-
-    pub fn cons(car: impl Into<Value>, cdr: impl Into<Value>) -> Self {
-        Value::new((car.into(), cdr.into()))
-    }
-
-    fn try_as_var(&self) -> Option<Var> {
-        self.downcast_ref().copied()
-    }
-
-    fn downcast_ref<T: 'static>(&self) -> Option<&T> {
-        self.0.as_any().downcast_ref()
-    }
-}
+use value::Value;
 
 #[derive(Clone, PartialEq)]
 pub struct Substitution<'s> {
     subs: Cow<'s, HashMap<Var, Value>>,
-}
-
-impl PartialEq<Var> for Value {
-    fn eq(&self, v: &Var) -> bool {
-        self.0
-            .as_any()
-            .downcast_ref::<Var>()
-            .map(|sv| sv == v)
-            .unwrap_or(false)
-    }
 }
 
 impl<'s> Substitution<'s> {
@@ -68,7 +30,7 @@ impl<'s> Substitution<'s> {
     }
 
     fn walk_star(&self, v: &Value) -> Value {
-        self.walk(v).clone().0.walk_star(self)
+        self.walk(v).walk_star(self)
     }
 
     fn extend(&mut self, x: Var, v: Value) -> bool {
@@ -90,7 +52,7 @@ impl<'s> Substitution<'s> {
 
     fn occurs(&self, x: &Var, v: &Value) -> bool {
         let v = self.walk(v);
-        v.0.occurs(x, self)
+        v.occurs(x, self)
     }
 
     fn unify(self, u: &Value, v: &Value) -> Option<Self> {
@@ -107,11 +69,11 @@ impl<'s> Substitution<'s> {
 
         let u = u.clone();
         let v = v.clone();
-        u.0.unify(&v, self)
+        u.unify(&v, self)
     }
 
     fn reify_s(self, v: &Value) -> Self {
-        self.walk(v).0.clone().reify_s(self)
+        self.walk(v).clone().reify_s(self)
     }
 }
 
@@ -124,12 +86,6 @@ pub trait Structure: std::any::Any + std::fmt::Debug {
     fn as_any(&self) -> &dyn Any;
 
     fn eqv(&self, other: &Value) -> bool;
-}
-
-impl<T: Structure> From<T> for Value {
-    fn from(v: T) -> Self {
-        Value(Arc::new(v))
-    }
 }
 
 pub trait Atomic: std::fmt::Debug {}
@@ -151,17 +107,6 @@ impl Atomic for f32 {}
 impl Atomic for String {}
 impl Atomic for &str {}
 impl<T: Atomic> Atomic for Box<T> {}
-impl<T: Atomic> Atomic for Arc<T> {}
-
-impl<T: 'static + Atomic + PartialEq> PartialEq<T> for Value {
-    fn eq(&self, other: &T) -> bool {
-        self.0
-            .as_any()
-            .downcast_ref::<T>()
-            .map(|x| x == other)
-            .unwrap_or(false)
-    }
-}
 
 impl<T: 'static + Atomic + PartialEq> Structure for T {
     fn occurs<'s>(&self, _x: &Var, _s: &Substitution<'s>) -> bool {
@@ -177,7 +122,7 @@ impl<T: 'static + Atomic + PartialEq> Structure for T {
     }
 
     fn walk_star(self: Arc<Self>, _: &Substitution<'_>) -> Value {
-        Value(self)
+        Value::from_arc(self)
     }
 
     fn reify_s<'s>(&self, s: Substitution<'s>) -> Substitution<'s> {
@@ -190,8 +135,6 @@ impl<T: 'static + Atomic + PartialEq> Structure for T {
 
     fn eqv(&self, other: &Value) -> bool {
         other
-            .0
-            .as_any()
             .downcast_ref::<T>()
             .map(|o| o == self)
             .unwrap_or(false)
@@ -229,8 +172,6 @@ impl Structure for Var {
 
     fn eqv(&self, other: &Value) -> bool {
         other
-            .0
-            .as_any()
             .downcast_ref::<Var>()
             .map(|v| v == self)
             .unwrap_or(false)
@@ -247,7 +188,7 @@ impl Structure for ReifiedVar {
     }
 
     fn walk_star(self: Arc<Self>, _: &Substitution<'_>) -> Value {
-        Value(self)
+        Value::from_arc(self)
     }
 
     fn reify_s<'s>(&self, s: Substitution<'s>) -> Substitution<'s> {
@@ -260,8 +201,6 @@ impl Structure for ReifiedVar {
 
     fn eqv(&self, other: &Value) -> bool {
         other
-            .0
-            .as_any()
             .downcast_ref::<ReifiedVar>()
             .map(|v| v == self)
             .unwrap_or(false)
@@ -290,7 +229,7 @@ impl Structure for Option<Value> {
 
     fn walk_star(self: Arc<Self>, s: &Substitution<'_>) -> Value {
         match &*self {
-            None => Value(self),
+            None => Value::from_arc(self),
             Some(v) => s.walk_star(v),
         }
     }
@@ -603,12 +542,6 @@ impl<T: std::fmt::Debug> std::fmt::Debug for Stream<T> {
     }
 }
 
-impl std::fmt::Debug for Value {
-    fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
-        write!(f, "{:?}", self.0)
-    }
-}
-
 impl std::fmt::Debug for Substitution<'_> {
     fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
         write!(f, "{{")?;
@@ -620,16 +553,6 @@ impl std::fmt::Debug for Substitution<'_> {
             write!(f, ", {:?}: {:?}", var, val)?;
         }
         write!(f, "}}")
-    }
-}
-
-impl From<Vec<Value>> for Value {
-    fn from(items: Vec<Value>) -> Self {
-        let mut list = Value::from(());
-        for v in items.into_iter().rev() {
-            list = Value::cons(v, list);
-        }
-        list
     }
 }
 
