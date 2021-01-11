@@ -1,6 +1,6 @@
 use super::value::Value;
+use crate::core::logic_variable::Var;
 use crate::core::structure::Structure;
-use crate::logic_variable::Var;
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::fmt::Formatter;

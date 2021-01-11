@@ -1,6 +1,6 @@
+use crate::core::logic_variable::{ReifiedVar, Var};
 use crate::core::substitution::Substitution;
 use crate::core::value::Value;
-use crate::logic_variable::{ReifiedVar, Var};
 use std::any::Any;
 use std::sync::Arc;
 

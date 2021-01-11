@@ -1,9 +1,10 @@
+pub mod logic_variable;
 pub mod stream;
 pub mod structure;
 pub mod substitution;
 pub mod value;
 
-use crate::logic_variable::Var;
+use logic_variable::Var;
 use std::sync::Arc;
 use stream::Stream;
 use substitution::Substitution;
@@ -209,7 +210,7 @@ macro_rules! condu {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::logic_variable::ReifiedVar;
+    use crate::core::logic_variable::ReifiedVar;
     use std::borrow::Cow;
     use std::collections::HashMap;
 
