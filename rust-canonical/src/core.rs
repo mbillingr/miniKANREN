@@ -10,7 +10,7 @@ pub struct Value(Arc<dyn Structure>);
 
 impl PartialEq for Value {
     fn eq(&self, other: &Self) -> bool {
-        Arc::ptr_eq(&self.0, &other.0) || self.0.eqv(&*other.0)
+        Arc::ptr_eq(&self.0, &other.0) || self.0.eqv(&other)
     }
 }
 
@@ -28,7 +28,11 @@ impl Value {
     }
 
     fn try_as_var(&self) -> Option<Var> {
-        self.0.as_any().downcast_ref().copied()
+        self.downcast_ref().copied()
+    }
+
+    fn downcast_ref<T: 'static>(&self) -> Option<&T> {
+        self.0.as_any().downcast_ref()
     }
 }
 
@@ -64,15 +68,11 @@ impl<'s> Substitution<'s> {
     }
 
     fn walk_star(&self, v: &Value) -> Value {
-        let v = self.walk(v);
-        if let Some(_) = v.try_as_var() {
-            v.clone()
+        let v = self.walk(v).clone();
+        if let Some(_) = v.downcast_ref::<ReifiedVar>() {
+            v
         } else {
-            if let Some(_) = v.0.as_any().downcast_ref::<ReifiedVar>() {
-                v.clone()
-            } else {
-                v.0.clone().walk_star(self)
-            }
+            v.0.walk_star(self)
         }
     }
 
@@ -95,11 +95,7 @@ impl<'s> Substitution<'s> {
 
     fn occurs(&self, x: &Var, v: &Value) -> bool {
         let v = self.walk(v);
-        if let Some(var) = v.try_as_var() {
-            &var == x
-        } else {
-            v.0.occurs(x, self)
-        }
+        v.0.occurs(x, self)
     }
 
     fn unify(self, u: &Value, v: &Value) -> Option<Self> {
@@ -107,50 +103,32 @@ impl<'s> Substitution<'s> {
         let v = self.walk(v);
 
         if let Some(u) = u.try_as_var() {
-            if let Some(v) = v.try_as_var() {
-                if u == v {
-                    return Some(self);
-                }
-            }
-        }
-
-        if let Some(u) = u.try_as_var() {
-            let v = v.clone();
-            return self.extended(u, v);
+            return u.unify(&v.clone(), self);
         }
 
         if let Some(v) = v.try_as_var() {
-            let u = u.clone();
-            return self.extended(v, u);
+            return v.unify(&u.clone(), self);
         }
 
-        let uval = u.0.clone();
-        let vval = v.0.clone();
-        uval.unify(&*vval, self)
+        let u = u.clone();
+        let v = v.clone();
+        u.0.unify(&v, self)
     }
 
     fn reify_s(self, v: &Value) -> Self {
-        let v = self.walk(v);
-
-        if let Some(var) = v.try_as_var() {
-            let var = var.clone();
-            let reified = Value::new(ReifiedVar(self.subs.len()));
-            self.extended(var, reified).unwrap()
-        } else {
-            v.0.clone().reify_s(self)
-        }
+        self.walk(v).0.clone().reify_s(self)
     }
 }
 
 pub trait Structure: std::any::Any + std::fmt::Debug {
     fn occurs<'s>(&self, x: &Var, s: &Substitution<'s>) -> bool;
-    fn unify<'s>(&self, v: &dyn Structure, s: Substitution<'s>) -> Option<Substitution<'s>>;
+    fn unify<'s>(&self, v: &Value, s: Substitution<'s>) -> Option<Substitution<'s>>;
     fn walk_star(self: Arc<Self>, s: &Substitution<'_>) -> Value;
     fn reify_s<'s>(&self, s: Substitution<'s>) -> Substitution<'s>;
 
     fn as_any(&self) -> &dyn Any;
 
-    fn eqv(&self, other: &dyn Structure) -> bool;
+    fn eqv(&self, other: &Value) -> bool;
 }
 
 impl<T: Structure> From<T> for Value {
@@ -195,7 +173,7 @@ impl<T: 'static + Atomic + PartialEq> Structure for T {
         false
     }
 
-    fn unify<'s>(&self, v: &dyn Structure, s: Substitution<'s>) -> Option<Substitution<'s>> {
+    fn unify<'s>(&self, v: &Value, s: Substitution<'s>) -> Option<Substitution<'s>> {
         if self.eqv(v) {
             Some(s)
         } else {
@@ -215,8 +193,9 @@ impl<T: 'static + Atomic + PartialEq> Structure for T {
         self
     }
 
-    fn eqv(&self, other: &dyn Structure) -> bool {
+    fn eqv(&self, other: &Value) -> bool {
         other
+            .0
             .as_any()
             .downcast_ref::<T>()
             .map(|o| o == self)
@@ -225,30 +204,37 @@ impl<T: 'static + Atomic + PartialEq> Structure for T {
 }
 
 impl Structure for Var {
-    fn occurs<'s>(&self, _x: &Var, _s: &Substitution<'s>) -> bool {
-        //self == x
-        unimplemented!()
+    fn occurs<'s>(&self, x: &Var, _s: &Substitution<'s>) -> bool {
+        self == x
     }
 
-    fn unify<'s>(&self, _v: &dyn Structure, _s: Substitution<'s>) -> Option<Substitution<'s>> {
-        // s.extended(*self, v)
-        unimplemented!()
+    fn unify<'s>(&self, v: &Value, s: Substitution<'s>) -> Option<Substitution<'s>> {
+        if let Some(var) = v.try_as_var() {
+            if self == &var {
+                return Some(s);
+            }
+        }
+
+        let v = v.clone();
+        s.extended(*self, v)
     }
 
     fn walk_star(self: Arc<Self>, _: &Substitution<'_>) -> Value {
-        unimplemented!()
+        Value::var(*self)
     }
 
-    fn reify_s<'s>(&self, _s: Substitution<'s>) -> Substitution<'s> {
-        unimplemented!()
+    fn reify_s<'s>(&self, s: Substitution<'s>) -> Substitution<'s> {
+        let reified = Value::new(ReifiedVar(s.subs.len()));
+        s.extended(*self, reified).unwrap()
     }
 
     fn as_any(&self) -> &dyn Any {
         self
     }
 
-    fn eqv(&self, other: &dyn Structure) -> bool {
+    fn eqv(&self, other: &Value) -> bool {
         other
+            .0
             .as_any()
             .downcast_ref::<Var>()
             .map(|v| v == self)
@@ -261,7 +247,7 @@ impl Structure for ReifiedVar {
         false
     }
 
-    fn unify<'s>(&self, _v: &dyn Structure, _s: Substitution<'s>) -> Option<Substitution<'s>> {
+    fn unify<'s>(&self, _v: &Value, _s: Substitution<'s>) -> Option<Substitution<'s>> {
         unimplemented!()
     }
 
@@ -277,8 +263,9 @@ impl Structure for ReifiedVar {
         self
     }
 
-    fn eqv(&self, other: &dyn Structure) -> bool {
+    fn eqv(&self, other: &Value) -> bool {
         other
+            .0
             .as_any()
             .downcast_ref::<ReifiedVar>()
             .map(|v| v == self)
@@ -294,8 +281,8 @@ impl Structure for Option<Value> {
         }
     }
 
-    fn unify<'s>(&self, v: &dyn Structure, s: Substitution<'s>) -> Option<Substitution<'s>> {
-        if let Some(other) = v.as_any().downcast_ref::<Self>() {
+    fn unify<'s>(&self, v: &Value, s: Substitution<'s>) -> Option<Substitution<'s>> {
+        if let Some(other) = v.downcast_ref::<Self>() {
             match (self, other) {
                 (Some(su), Some(sv)) => s.unify(su, sv),
                 (None, None) => Some(s),
@@ -324,8 +311,8 @@ impl Structure for Option<Value> {
         self
     }
 
-    fn eqv(&self, other: &dyn Structure) -> bool {
-        if let Some(o) = other.as_any().downcast_ref::<Self>() {
+    fn eqv(&self, other: &Value) -> bool {
+        if let Some(o) = other.downcast_ref::<Self>() {
             self == o
         } else {
             false
@@ -338,8 +325,8 @@ impl Structure for (Value, Value) {
         s.occurs(x, &self.0) || s.occurs(x, &self.1)
     }
 
-    fn unify<'s>(&self, v: &dyn Structure, s: Substitution<'s>) -> Option<Substitution<'s>> {
-        if let Some(other) = v.as_any().downcast_ref::<Self>() {
+    fn unify<'s>(&self, v: &Value, s: Substitution<'s>) -> Option<Substitution<'s>> {
+        if let Some(other) = v.downcast_ref::<Self>() {
             s.unify(&self.0, &other.0)
                 .and_then(|s| s.unify(&self.1, &other.1))
         } else {
@@ -359,8 +346,8 @@ impl Structure for (Value, Value) {
         self
     }
 
-    fn eqv(&self, other: &dyn Structure) -> bool {
-        if let Some(o) = other.as_any().downcast_ref::<Self>() {
+    fn eqv(&self, other: &Value) -> bool {
+        if let Some(o) = other.downcast_ref::<Self>() {
             self == o
         } else {
             false
@@ -1006,5 +993,42 @@ mod tests {
             run!(5, q, eq(q, "onion"), alwayso(),),
             Stream::from_iter(std::iter::repeat(Value::new("onion")).take(5))
         );
+    }
+
+    #[test]
+    fn unify_same_var_does_not_modify_substitution() {
+        let var_as_val = Var::new("x").into();
+        let sub = Substitution::empty().unify(&var_as_val, &var_as_val);
+        assert_eq!(sub, Some(Substitution::empty()));
+    }
+
+    #[test]
+    fn unify_two_vars_extends_substitution() {
+        let x = Var::new("x");
+        let y = Var::new("y");
+        let sub = Substitution::empty().unify(&x.into(), &y.into()).unwrap();
+        let expected = Substitution::empty().extended(x, y.into()).unwrap();
+        assert_eq!(sub, expected);
+    }
+
+    #[test]
+    fn unify_value_with_var_extends_substitution() {
+        let x = Var::new("x");
+        let v = Value::new(0);
+        let sub = Substitution::empty().unify(&v, &x.into()).unwrap();
+        let expected = Substitution::empty().extended(x, v).unwrap();
+        assert_eq!(sub, expected);
+    }
+
+    #[test]
+    fn unify_same_values_does_not_modify_substitution() {
+        let sub = Substitution::empty().unify(&Value::new(42), &Value::new(42));
+        assert_eq!(sub, Some(Substitution::empty()));
+    }
+
+    #[test]
+    fn unify_different_values_fails() {
+        let sub = Substitution::empty().unify(&Value::new(1), &Value::new(2));
+        assert_eq!(sub, None);
     }
 }
