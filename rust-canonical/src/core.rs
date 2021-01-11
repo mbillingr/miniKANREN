@@ -68,12 +68,7 @@ impl<'s> Substitution<'s> {
     }
 
     fn walk_star(&self, v: &Value) -> Value {
-        let v = self.walk(v).clone();
-        if let Some(_) = v.downcast_ref::<ReifiedVar>() {
-            v
-        } else {
-            v.0.walk_star(self)
-        }
+        self.walk(v).clone().0.walk_star(self)
     }
 
     fn extend(&mut self, x: Var, v: Value) -> bool {
@@ -252,7 +247,7 @@ impl Structure for ReifiedVar {
     }
 
     fn walk_star(self: Arc<Self>, _: &Substitution<'_>) -> Value {
-        unimplemented!()
+        Value(self)
     }
 
     fn reify_s<'s>(&self, s: Substitution<'s>) -> Substitution<'s> {
