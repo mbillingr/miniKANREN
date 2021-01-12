@@ -41,19 +41,19 @@ impl Value {
         self.0.as_any().downcast_ref()
     }
 
-    pub fn occurs<'s>(&self, x: &Var, s: &Substitution<'s>) -> bool {
+    pub(super) fn occurs<'s>(&self, x: &Var, s: &Substitution<'s>) -> bool {
         self.0.occurs(x, s)
     }
 
-    pub fn unify<'s>(&self, v: &Value, s: Substitution<'s>) -> Option<Substitution<'s>> {
+    pub(super) fn unify<'s>(&self, v: &Value, s: Substitution<'s>) -> Option<Substitution<'s>> {
         self.0.unify(v, s)
     }
 
-    pub fn walk_star(&self, s: &Substitution<'_>) -> Value {
+    pub(super) fn walk_star(&self, s: &Substitution<'_>) -> Value {
         self.0.clone().walk_star(s)
     }
 
-    pub fn reify_s<'s>(&self, s: Substitution<'s>) -> Substitution<'s> {
+    pub(super) fn reify_s<'s>(&self, s: Substitution<'s>) -> Substitution<'s> {
         self.0.reify_s(s)
     }
 }
