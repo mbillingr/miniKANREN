@@ -13,6 +13,10 @@ macro_rules! list {
         Value::cons($single, ())
     };
 
+    ($car:expr ; $cdr:expr) => {
+        Value::cons($car, $cdr)
+    };
+
     (($($first:tt)*), $($rest:tt)*) => {
         Value::cons(list![$($first)*], list![$($rest)*])
     };
@@ -87,18 +91,18 @@ mod tests {
 
     #[test]
     fn membero_succeeds_for_all_possible_lists() {
-        let mut result = run!(*, q, membero(42, q)).into_iter();
+        let mut result = run!(q, membero(42, q));
         assert_eq!(
-            result.next(),
-            Some(list![Value::new(42), Value::rv(0)].into())
+            result.next().unwrap(),
+            list![Value::new(42) ; Value::rv(0)]
         );
         assert_eq!(
-            result.next(),
-            Some(list![Value::rv(0), Value::new(42), Value::rv(1)].into())
+            result.next().unwrap(),
+            list![Value::rv(0), Value::new(42) ; Value::rv(1)]
         );
         assert_eq!(
-            result.next(),
-            Some(list![Value::rv(0), Value::rv(1), Value::new(42), Value::rv(2)].into())
+            result.next().unwrap(),
+            list![Value::rv(0), Value::rv(1), Value::new(42) ; Value::rv(2)]
         );
     }
 }

@@ -23,9 +23,14 @@ pub fn reify(v: Value) -> impl Fn(StatSubs) -> Value {
     }
 }
 
-pub fn run_goal(n: Option<usize>, g: impl Fn(StatSubs) -> Stream<StatSubs>) -> Stream<StatSubs> {
-    match n {
-        Some(n) => g(Substitution::empty()).take_inf(n),
-        None => g(Substitution::empty()).take_inf_all(),
-    }
+pub fn run_goal(n: usize, g: impl Fn(StatSubs) -> Stream<StatSubs>) -> Stream<StatSubs> {
+    g(Substitution::empty()).take_inf(n)
+}
+
+pub fn run_goal_inf(g: impl Fn(StatSubs) -> Stream<StatSubs>) -> Stream<StatSubs> {
+    g(Substitution::empty()).take_inf_all()
+}
+
+pub fn iterate_goal(g: impl Fn(StatSubs) -> Stream<StatSubs>) -> impl Iterator<Item = StatSubs> {
+    g(Substitution::empty()).into_iter()
 }

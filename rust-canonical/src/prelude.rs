@@ -64,22 +64,30 @@ macro_rules! defrel {
 #[macro_export]
 macro_rules! run {
     (*, ($($x:ident),*), $($body:tt)*) => {
-        run!(@ None, ($($x),*), $($body)*)
+        run!(@ *, ($($x),*), $($body)*)
     };
 
     (*, $q:ident, $($g:expr),* $(,)?) => {
-        run!(@ None, $q, $($g),*)
+        run!(@ *, $q, $($g),*)
     };
 
     ($n:expr, ($($x:ident),*), $($body:tt)*) => {
-        run!(@ Some($n), ($($x),*), $($body)*)
+        run!(@ $n, ($($x),*), $($body)*)
     };
 
-    ($n:expr, $q:ident, $($g:expr),* $(,)?) => {
-        run!(@ Some($n), $q, $($g),*)
+    ($n:tt, $q:ident, $($g:expr),* $(,)?) => {
+        run!(@ $n, $q, $($g),*)
     };
 
-    (@ $n:expr, ($($x:ident),*), $($g:expr),* $(,)?) => {
+    (($($x:ident),*), $($body:tt)*) => {
+        run!(@ iter, ($($x),*), $($body)*)
+    };
+
+    ($q:ident, $($g:expr),* $(,)?) => {
+        run!(@ iter, $q, $($g),*)
+    };
+
+    (@ $n:tt, ($($x:ident),*), $($g:expr),* $(,)?) => {
         run!(@ $n, q, {
             fresh!(
                 ($($x),*),
@@ -88,6 +96,18 @@ macro_rules! run {
             )
         })
     };
+
+    (@ *, $q:ident, $($g:expr),* $(,)?) => {{
+        let $q = Var::new(stringify!($q));
+        let var = Value::var($q.clone());
+        run_goal_inf(conj!($($g),*)).map(reify(var))
+    }};
+
+    (@ iter, $q:ident, $($g:expr),* $(,)?) => {{
+        let $q = Var::new(stringify!($q));
+        let var = Value::var($q.clone());
+        iterate_goal(conj!($($g),*)).map(reify(var))
+    }};
 
     (@ $n:expr, $q:ident, $($g:expr),* $(,)?) => {{
         let $q = Var::new(stringify!($q));
@@ -135,7 +155,7 @@ mod tests {
     use crate::core::value::Value;
     use crate::goals::primitive::{alwayso, conj2, disj2, eq, fail, ifte, succeed};
     use crate::goals::StatSubs;
-    use crate::{reify, run_goal};
+    use crate::{reify, run_goal, run_goal_inf};
     use std::borrow::Cow;
     use std::collections::HashMap;
 
@@ -291,7 +311,7 @@ mod tests {
         );
 
         assert_eq!(
-            run_goal(Some(5), disj2(eq("olive", x), eq("oil", x)))
+            run_goal(5, disj2(eq("olive", x), eq("oil", x)))
                 .into_iter()
                 .map(|s| reify((x).into())(s))
                 .collect::<Vec<_>>(),
