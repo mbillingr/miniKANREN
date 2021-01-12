@@ -92,19 +92,19 @@ macro_rules! run {
     (@ *, $q:ident, $($g:expr),* $(,)?) => {{
         let $q = Var::new(stringify!($q));
         let var = Value::var($q.clone());
-        conj!($($g),*).run_inf().map(reify(var))
+        conj!($($g),*).run_inf().map(move |s| s.reify(&var))
     }};
 
     (@ iter, $q:ident, $($g:expr),* $(,)?) => {{
         let $q = Var::new(stringify!($q));
         let var = Value::var($q.clone());
-        conj!($($g),*).iter().map(reify(var))
+        conj!($($g),*).iter().map(move |s| s.reify(&var))
     }};
 
     (@ $n:expr, $q:ident, $($g:expr),* $(,)?) => {{
         let $q = Var::new(stringify!($q));
         let var = Value::var($q.clone());
-        conj!($($g),*).run($n).map(reify(var))
+        conj!($($g),*).run($n).map(move |s| s.reify(&var))
     }};
 }
 

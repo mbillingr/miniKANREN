@@ -82,6 +82,12 @@ impl<'s> Substitution<'s> {
     pub fn reify_s(self, v: &Value) -> Self {
         self.walk(v).clone().reify_s(self)
     }
+
+    pub fn reify(&self, v: &Value) -> Value {
+        let v = self.walk_star(v);
+        let r = Substitution::empty().reify_s(&v);
+        r.walk_star(&v)
+    }
 }
 
 impl std::fmt::Debug for Substitution<'_> {

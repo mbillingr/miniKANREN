@@ -6,8 +6,6 @@ pub mod prelude;
 
 use crate::core::logic_variable::Var;
 use crate::core::stream::Stream;
-use crate::core::substitution::Substitution;
-use crate::core::value::Value;
 use crate::goals::StatSubs;
 
 pub fn call_with_fresh_var<T: Fn(StatSubs) -> Stream<StatSubs>>(
@@ -15,14 +13,6 @@ pub fn call_with_fresh_var<T: Fn(StatSubs) -> Stream<StatSubs>>(
     f: impl Fn(Var) -> T,
 ) -> T {
     f(Var::new(name))
-}
-
-pub fn reify(v: Value) -> impl Fn(StatSubs) -> Value {
-    move |s| {
-        let v = s.walk_star(&v);
-        let r = Substitution::empty().reify_s(&v);
-        r.walk_star(&v)
-    }
 }
 
 #[cfg(test)]
@@ -34,7 +24,7 @@ mod tests {
     use crate::core::value::Value;
     use crate::goals::primitive::{alwayso, conj2, disj2, eq, fail, ifte, succeed};
     use crate::goals::StatSubs;
-    use crate::{conj, defrel, disj, fresh, reify, run};
+    use crate::{conj, defrel, disj, fresh, run};
     use std::borrow::Cow;
     use std::collections::HashMap;
 
@@ -180,7 +170,7 @@ mod tests {
         let s = substitution! {x: a1, y: a2, w: a3};
         //println!("{:?}", reify((&x).into())(s));
         assert_eq!(
-            reify((x).into())(s),
+            s.reify(&x.into()),
             Value::from(vec![
                 Value::from(ReifiedVar(0)),
                 Value::from(vec![Value::from(ReifiedVar(1)), Value::from(ReifiedVar(0))]),
@@ -194,7 +184,7 @@ mod tests {
             disj2(eq("olive", x), eq("oil", x))
                 .run(5)
                 .into_iter()
-                .map(|s| reify((x).into())(s))
+                .map(|s| s.reify(&x.into()))
                 .collect::<Vec<_>>(),
             vec![Value::from("olive"), Value::from("oil")],
         );
