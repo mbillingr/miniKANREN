@@ -3,7 +3,6 @@ use crate::core::stream::Stream;
 use crate::core::substitution::Substitution;
 use crate::core::value::Value;
 use crate::goals::StatSubs;
-use std::sync::Arc;
 
 pub fn eq(u: impl Into<Value>, v: impl Into<Value>) -> impl Goal<StatSubs> {
     let u = u.into();
@@ -35,7 +34,6 @@ pub fn alwayso() -> impl Goal<StatSubs> {
 }
 
 pub fn conj2(g1: impl Goal<StatSubs>, g2: impl 'static + Goal<StatSubs>) -> impl Goal<StatSubs> {
-    let g2 = Arc::new(g2);
     move |s| g1.apply(s).append_map_inf(g2.clone())
 }
 
@@ -44,7 +42,6 @@ pub fn ifte(
     g2: impl 'static + Goal<StatSubs>,
     g3: impl Goal<StatSubs>,
 ) -> impl Goal<StatSubs> {
-    let g2 = Arc::new(g2);
     move |s: StatSubs| {
         let mut s_inf = g1.apply(s.clone());
         loop {
