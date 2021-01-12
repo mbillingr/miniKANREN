@@ -1,8 +1,9 @@
 //! Rust implementation of the miniKANREN relational logic language.
 
 #[macro_use]
-pub mod macros;
+mod macros;
 pub mod core;
+pub mod database;
 pub mod goals;
 pub mod prelude;
 
