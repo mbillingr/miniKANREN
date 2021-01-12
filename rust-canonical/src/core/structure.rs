@@ -61,7 +61,7 @@ impl Structure for Var {
         }
 
         let v = v.clone();
-        s.extended(*self, v)
+        s.extend(*self, v)
     }
 
     fn walk_star(self: Arc<Self>, _: &Substitution<'_>) -> Value {
@@ -70,7 +70,7 @@ impl Structure for Var {
 
     fn reify_s<'s>(&self, s: Substitution<'s>) -> Substitution<'s> {
         let reified = Value::new(ReifiedVar(s.n_subs()));
-        s.extended(*self, reified).unwrap()
+        s.extend(*self, reified).unwrap()
     }
 
     fn as_any(&self) -> &dyn Any {

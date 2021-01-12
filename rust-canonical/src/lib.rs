@@ -13,27 +13,9 @@ mod tests {
     use crate::core::value::Value;
     use crate::goals::primitive::{alwayso, conj2, disj2, eq, fail, ifte, succeed};
     use crate::goals::StatSubs;
-    use crate::{conj, defrel, disj, fresh, run};
+    use crate::{conj, defrel, disj, fresh, run, substitution};
     use std::borrow::Cow;
     use std::collections::HashMap;
-
-    fn walk<'s>(v: &Var, s: &'s Substitution) -> Value {
-        s.walk(&Value::var(v.clone())).clone()
-    }
-
-    macro_rules! substitution {
-        () => {Substitution{ subs: Cow::Owned(HashMap::new())}};
-
-        ($($var:ident : $val:expr),*) => {{
-            let mut subs = HashMap::new();
-            $(
-                subs.insert($var.clone(), Value::from($val.clone()));
-            )*
-            Substitution {
-                subs: Cow::Owned(subs)
-            }
-        }}
-    }
 
     #[test]
     fn it_works() {
@@ -44,18 +26,15 @@ mod tests {
         let y = Var::new("y");
         let z = Var::new("z");
 
-        assert_eq!(walk(&z, &substitution! {z: "a", x: w, y: z}), "a");
-        assert_eq!(walk(&y, &substitution! {z: "a", x: w, y: z}), "a");
-        assert_eq!(walk(&x, &substitution! {z: "a", x: w, y: z}), w);
-        assert_eq!(walk(&x, &substitution! {x: y, v: x, w: x}), y);
-        assert_eq!(walk(&v, &substitution! {x: y, v: x, w: x}), y);
-        assert_eq!(walk(&w, &substitution! {x: y, v: x, w: x}), y);
-
         assert!(Substitution::empty().occurs(&x, &Value::var(x.clone())));
         assert!(substitution! {y: x}.occurs(&x, &Value::cons(Value::var(y), ())));
         assert!(substitution! {y: x}.occurs(&x, &vec![Value::var(y)].into()));
-        assert!(!Substitution::empty().extend(x.clone(), vec![Value::var(x.clone())].into()));
-        assert!(!substitution! {y: x}.extend(x.clone(), vec![Value::var(y.clone())].into()));
+        assert!(Substitution::empty()
+            .extend(x.clone(), vec![Value::var(x.clone())].into())
+            .is_none());
+        assert!(substitution! {y: x}
+            .extend(x.clone(), vec![Value::var(y.clone())].into())
+            .is_none());
 
         assert_eq!(
             Substitution::empty().unify(
@@ -139,12 +118,6 @@ mod tests {
         assert_eq!(
             conj2(eq("olive", x), eq(y.clone(), x.clone())).apply(Substitution::empty()),
             Stream::singleton(substitution! {y: "olive", x: "olive"})
-        );
-
-        assert_eq!(
-            substitution! {x: "b", z: y, w: vec![Value::from(x), "e".into(), (z).into()]}
-                .walk_star(&w.clone().into()),
-            Value::from(vec![Value::from("b"), "e".into(), y.clone().into()])
         );
 
         let a1 = Value::from(vec![

@@ -27,7 +27,7 @@ impl<'s> Substitution<'s> {
         self.subs.len()
     }
 
-    pub fn walk<'a>(&'a self, v: &'a Value) -> &'a Value {
+    pub(super) fn walk<'a>(&'a self, v: &'a Value) -> &'a Value {
         if let Some(var) = v.try_as_var() {
             if let Some(next) = self.subs.get(&var) {
                 return self.walk(next);
@@ -36,24 +36,16 @@ impl<'s> Substitution<'s> {
         v
     }
 
-    pub fn walk_star(&self, v: &Value) -> Value {
+    pub(super) fn walk_star(&self, v: &Value) -> Value {
         self.walk(v).walk_star(self)
     }
 
-    pub fn extend(&mut self, x: Var, v: Value) -> bool {
+    pub fn extend(mut self, x: Var, v: Value) -> Option<Self> {
         if self.occurs(&x, &v) {
-            false
+            None
         } else {
             self.subs.to_mut().insert(x, v);
-            true
-        }
-    }
-
-    pub fn extended(mut self, x: Var, v: Value) -> Option<Self> {
-        if self.extend(x, v) {
             Some(self)
-        } else {
-            None
         }
     }
 
@@ -79,7 +71,7 @@ impl<'s> Substitution<'s> {
         u.unify(&v, self)
     }
 
-    pub fn reify_s(self, v: &Value) -> Self {
+    pub(super) fn reify_s(self, v: &Value) -> Self {
         self.walk(v).clone().reify_s(self)
     }
 
@@ -104,9 +96,50 @@ impl std::fmt::Debug for Substitution<'_> {
     }
 }
 
+#[macro_export]
+macro_rules! substitution {
+    () => {Substitution{ subs: Cow::Owned(HashMap::new())}};
+
+    ($($var:ident : $val:expr),*) => {{
+        let mut subs = HashMap::new();
+        $(
+            subs.insert($var.clone(), Value::from($val.clone()));
+        )*
+        Substitution {
+            subs: Cow::Owned(subs)
+        }
+    }}
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn walk(v: Var, s: &Substitution) -> Value {
+        s.walk(&Value::var(v)).clone()
+    }
+
+    #[test]
+    fn it_works() {
+        let v = Var::new("v");
+        let w = Var::new("w");
+        let x = Var::new("x");
+        let y = Var::new("y");
+        let z = Var::new("z");
+
+        assert_eq!(walk(z, &substitution! {z: "a", x: w, y: z}), "a");
+        assert_eq!(walk(y, &substitution! {z: "a", x: w, y: z}), "a");
+        assert_eq!(walk(x, &substitution! {z: "a", x: w, y: z}), w);
+        assert_eq!(walk(x, &substitution! {x: y, v: x, w: x}), y);
+        assert_eq!(walk(v, &substitution! {x: y, v: x, w: x}), y);
+        assert_eq!(walk(w, &substitution! {x: y, v: x, w: x}), y);
+
+        assert_eq!(
+            substitution! {x: "b", z: y, w: vec![Value::from(x), "e".into(), (z).into()]}
+                .walk_star(&w.clone().into()),
+            Value::from(vec![Value::from("b"), "e".into(), y.clone().into()])
+        );
+    }
 
     #[test]
     fn unify_same_var_does_not_modify_substitution() {
@@ -120,7 +153,7 @@ mod tests {
         let x = Var::new("x");
         let y = Var::new("y");
         let sub = Substitution::empty().unify(&x.into(), &y.into()).unwrap();
-        let expected = Substitution::empty().extended(x, y.into()).unwrap();
+        let expected = Substitution::empty().extend(x, y.into()).unwrap();
         assert_eq!(sub, expected);
     }
 
@@ -129,7 +162,7 @@ mod tests {
         let x = Var::new("x");
         let v = Value::new(0);
         let sub = Substitution::empty().unify(&v, &x.into()).unwrap();
-        let expected = Substitution::empty().extended(x, v).unwrap();
+        let expected = Substitution::empty().extend(x, v).unwrap();
         assert_eq!(sub, expected);
     }
 
