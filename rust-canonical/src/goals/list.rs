@@ -92,10 +92,7 @@ mod tests {
     #[test]
     fn membero_succeeds_for_all_possible_lists() {
         let mut result = run!(q, membero(42, q));
-        assert_eq!(
-            result.next().unwrap(),
-            list![Value::new(42) ; Value::rv(0)]
-        );
+        assert_eq!(result.next().unwrap(), list![Value::new(42) ; Value::rv(0)]);
         assert_eq!(
             result.next().unwrap(),
             list![Value::rv(0), Value::new(42) ; Value::rv(1)]
