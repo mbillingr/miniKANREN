@@ -13,7 +13,8 @@ mod tests {
     use crate::core::stream::Stream;
     use crate::core::substitution::Substitution;
     use crate::core::value::Value;
-    use crate::goals::primitive::{alwayso, conj2, disj2, eq, fail, ifte, succeed};
+    use crate::goals::combinators::{conj2, disj2, ifte};
+    use crate::goals::primitive::{alwayso, eq, fail, succeed};
     use crate::goals::StatSubs;
     use crate::{conj, defrel, disj, fresh, run, substitution};
     use std::borrow::Cow;

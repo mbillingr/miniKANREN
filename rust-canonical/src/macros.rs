@@ -1,6 +1,5 @@
 //! Macros for embedding miniKANREN as DSL in Rust
 
-
 /// Creates a goal that succeeds if any of its subgoals succeeds
 #[macro_export]
 macro_rules! disj {

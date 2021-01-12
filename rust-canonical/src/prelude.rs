@@ -4,5 +4,5 @@ pub use crate::{
         logic_variable::{ReifiedVar, Var},
         value::Value,
     },
-    goals::primitive::*,
+    goals::{combinators::*, primitive::*},
 };

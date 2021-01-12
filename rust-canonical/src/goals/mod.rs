@@ -2,6 +2,7 @@
 
 use crate::core::substitution::Substitution;
 
+pub mod combinators;
 pub mod list;
 pub mod primitive;
 

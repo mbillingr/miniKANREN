@@ -4,8 +4,8 @@ use crate::core::logic_variable::{ReifiedVar, Var};
 use crate::core::substitution::Substitution;
 use crate::core::value::Value;
 use std::any::Any;
-use std::sync::Arc;
 use std::rc::Rc;
+use std::sync::Arc;
 
 /// Trait implemented by all logic-compatible types
 pub trait Structure: std::any::Any + std::fmt::Debug {
@@ -169,7 +169,6 @@ impl Structure for (Value, Value) {
             .unwrap_or(false)
     }
 }
-
 
 impl<T: 'static + Atomic + PartialEq> Structure for T {
     fn occurs<'s>(&self, _x: &Var, _s: &Substitution<'s>) -> bool {
