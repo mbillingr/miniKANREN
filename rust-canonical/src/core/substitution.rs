@@ -10,6 +10,12 @@ pub struct Substitution<'s> {
     pub(crate) subs: Cow<'s, HashMap<Var, Value>>,
 }
 
+impl Default for Substitution<'_> {
+    fn default() -> Self {
+        Self::empty()
+    }
+}
+
 impl<'s> Substitution<'s> {
     pub fn empty() -> Self {
         Substitution {

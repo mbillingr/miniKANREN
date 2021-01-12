@@ -1,5 +1,6 @@
 pub use crate::{
     core::{
+        goal::Goal,
         logic_variable::{ReifiedVar, Var},
         value::Value,
     },
@@ -100,19 +101,19 @@ macro_rules! run {
     (@ *, $q:ident, $($g:expr),* $(,)?) => {{
         let $q = Var::new(stringify!($q));
         let var = Value::var($q.clone());
-        run_goal_inf(conj!($($g),*)).map(reify(var))
+        conj!($($g),*).run_inf().map(reify(var))
     }};
 
     (@ iter, $q:ident, $($g:expr),* $(,)?) => {{
         let $q = Var::new(stringify!($q));
         let var = Value::var($q.clone());
-        iterate_goal(conj!($($g),*)).map(reify(var))
+        conj!($($g),*).iter().map(reify(var))
     }};
 
     (@ $n:expr, $q:ident, $($g:expr),* $(,)?) => {{
         let $q = Var::new(stringify!($q));
         let var = Value::var($q.clone());
-        run_goal($n, conj!($($g),*)).map(reify(var))
+        conj!($($g),*).run($n).map(reify(var))
     }};
 }
 

@@ -1,4 +1,3 @@
-use crate::core::goal::Goal;
 use crate::core::logic_variable::Var;
 use crate::core::stream::Stream;
 use crate::core::substitution::Substitution;
@@ -24,18 +23,6 @@ pub fn reify(v: Value) -> impl Fn(StatSubs) -> Value {
     }
 }
 
-pub fn run_goal(n: usize, g: impl Goal<StatSubs>) -> Stream<StatSubs> {
-    g.apply(Substitution::empty()).take_inf(n)
-}
-
-pub fn run_goal_inf(g: impl Goal<StatSubs>) -> Stream<StatSubs> {
-    g.apply(Substitution::empty()).take_inf_all()
-}
-
-pub fn iterate_goal(g: impl Goal<StatSubs>) -> impl Iterator<Item = StatSubs> {
-    g.apply(Substitution::empty()).into_iter()
-}
-
 #[cfg(test)]
 mod tests {
     use crate::core::goal::Goal;
@@ -45,7 +32,7 @@ mod tests {
     use crate::core::value::Value;
     use crate::goals::primitive::{alwayso, conj2, disj2, eq, fail, ifte, succeed};
     use crate::goals::StatSubs;
-    use crate::{conj, defrel, disj, fresh, reify, run, run_goal, run_goal_inf};
+    use crate::{conj, defrel, disj, fresh, reify, run};
     use std::borrow::Cow;
     use std::collections::HashMap;
 
@@ -202,7 +189,8 @@ mod tests {
         );
 
         assert_eq!(
-            run_goal(5, disj2(eq("olive", x), eq("oil", x)))
+            disj2(eq("olive", x), eq("oil", x))
+                .run(5)
                 .into_iter()
                 .map(|s| reify((x).into())(s))
                 .collect::<Vec<_>>(),
