@@ -1,5 +1,4 @@
 use mini_kanren::core::stream::Stream;
-use mini_kanren::core::substitution::Substitution;
 use mini_kanren::database::Database;
 use mini_kanren::goals::StatSubs;
 use mini_kanren::prelude::*;
@@ -10,6 +9,7 @@ use std::sync::Arc;
 db_rel! {
     mano(p);
     womano(p);
+    vitalo(p, v);
 }
 
 fn main() {
@@ -22,10 +22,18 @@ fn main() {
             womano("Eve");
             mano("Kain");
             mano("Abel");
+
+            vitalo("Adam", "dead");
+            vitalo("Eve", "dead");
+            vitalo("Kain", "dead");
+            vitalo("Abel", "dead");
         }
     }
 
+    // Share database
+    let db = Arc::new(db);
+
     // run a simple query
-    let men: Vec<_> = run!(q, mano(&db, q)).collect();
+    let men: Vec<_> = run!(q, vitalo(&db, q, "dead")).collect();
     println!("All the men in the world: {:?}", men);
 }
