@@ -6,6 +6,7 @@ use crate::goals::primitive::{conj2, disj2, eq};
 use crate::goals::StatSubs;
 use crate::{conde, conj, defrel, disj, fresh};
 
+/// Constructs a cons list.
 #[macro_export]
 macro_rules! list {
     () => { Value::new(()) };
@@ -29,12 +30,14 @@ macro_rules! list {
 }
 
 defrel! {
+    /// Creates a goal that succeeds if p is equivalent to (a d).
     pub conso(a, d, p) {
         eq((a, d), p)
     }
 }
 
 defrel! {
+    /// Creates a goal that succeeds if p is a pair and its first element is equivalent to a.
     pub caro(p, a) {
         fresh!{ (d),
             eq((a, d.into()), p)
@@ -43,6 +46,7 @@ defrel! {
 }
 
 defrel! {
+    /// Creates a goal that succeeds if p is a pair and its second element is equivalent to d.
     pub cdro(p, d) {
         fresh!{ (a),
             eq((a.into(), d), p)
@@ -51,6 +55,7 @@ defrel! {
 }
 
 defrel! {
+    /// Creates a goal that succeeds if l is a list that contains x.
     pub membero(x, l) {
         conde!(
             caro(l.clone(), x.clone());

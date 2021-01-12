@@ -1,5 +1,8 @@
+//! Lazy stream implementation.
+
 use crate::core::goal::Goal;
 
+/// Possibly infinite sequence of values.
 pub enum Stream<T> {
     Empty,
     Pair(T, Box<Stream<T>>),
@@ -7,22 +10,27 @@ pub enum Stream<T> {
 }
 
 impl<T> Stream<T> {
+    /// Initialize an empty stream.
     pub fn empty() -> Self {
         Stream::Empty
     }
 
+    /// Create a stream with one element.
     pub fn singleton(x: T) -> Self {
         Stream::cons(x, Stream::Empty)
     }
 
+    /// Prepend an element to a stream.
     pub fn cons(a: T, d: Self) -> Self {
         Stream::Pair(a, Box::new(d))
     }
 
+    /// Create a suspended (lazily evaluated) stream.
     pub fn suspension(sup: impl 'static + FnOnce() -> Stream<T>) -> Self {
         Stream::Suspension(Box::new(sup))
     }
 
+    /// Create a stream with elements from an iterator.
     pub fn from_iter(mut iter: impl Iterator<Item = T>) -> Self {
         match iter.next() {
             None => Stream::Empty,
@@ -30,6 +38,7 @@ impl<T> Stream<T> {
         }
     }
 
+    /// Return `true` if the stream is empty.
     pub fn is_empty(&self) -> bool {
         match self {
             Stream::Empty => true,
@@ -37,6 +46,8 @@ impl<T> Stream<T> {
         }
     }
 
+    /// Return the number of elements in an unsuspended stream, or `None` if
+    /// the stream contains any suspensions.
     pub fn len(&self) -> Option<usize> {
         match self {
             Stream::Empty => Some(0),
@@ -45,6 +56,7 @@ impl<T> Stream<T> {
         }
     }
 
+    /// Truncate a stream to at most `n` elements, resolving any suspensions.
     pub fn take_inf(self, n: usize) -> Stream<T> {
         if n == 0 {
             return Stream::empty();
@@ -56,6 +68,8 @@ impl<T> Stream<T> {
         }
     }
 
+    /// Resolve all suspensions in the stream.
+    /// If the stream is infinite this function will not return and may crash.
     pub fn take_inf_all(self) -> Stream<T> {
         match self {
             Stream::Empty => Stream::empty(),
@@ -64,6 +78,7 @@ impl<T> Stream<T> {
         }
     }
 
+    /// Convert `Stream` to `Vec`.
     pub fn into_vec(self) -> Vec<T> {
         self.into_iter().collect()
     }
@@ -92,7 +107,7 @@ impl<T: 'static + Default> Stream<T> {
         match self {
             Stream::Empty => Stream::Empty,
             Stream::Pair(a, d) => Stream::append_inf(g.apply(a), d.append_map_inf(g)),
-            Stream::Suspension(sup) => Stream::Suspension(Box::new(|| sup().append_map_inf(g))),
+            Stream::Suspension(sup) => Stream::suspension(|| sup().append_map_inf(g)),
         }
     }
 
@@ -143,6 +158,7 @@ impl<T: std::fmt::Debug> std::fmt::Debug for Stream<T> {
     }
 }
 
+/// Iterator over a `Stream`.
 pub struct StreamIter<T>(Stream<T>);
 
 impl<T> Iterator for StreamIter<T> {

@@ -1,3 +1,7 @@
+//! Substitutions map variables to values.
+//!
+//! Variables can be atomic, composite or variables themselves.
+
 use super::value::Value;
 use crate::core::logic_variable::Var;
 use crate::core::structure::Structure;
@@ -5,6 +9,7 @@ use std::borrow::Cow;
 use std::collections::HashMap;
 use std::fmt::Formatter;
 
+/// Mapping of variables to values.
 #[derive(Clone, PartialEq)]
 pub struct Substitution<'s> {
     pub(crate) subs: Cow<'s, HashMap<Var, Value>>,
@@ -17,16 +22,22 @@ impl Default for Substitution<'_> {
 }
 
 impl<'s> Substitution<'s> {
+    /// Initialize an empty substitution
     pub fn empty() -> Self {
         Substitution {
             subs: Cow::Owned(HashMap::new()),
         }
     }
 
+    /// Get number of substituted variables
     pub fn n_subs(&self) -> usize {
         self.subs.len()
     }
 
+    /// Recursively attempt to resolve the value of a variable.
+    ///
+    /// If the `v` is no variable or a variable that cannot be
+    /// resolved (i.e. it is not substituted), `v` is returned.
     pub(super) fn walk<'a>(&'a self, v: &'a Value) -> &'a Value {
         if let Some(var) = v.try_as_var() {
             if let Some(next) = self.subs.get(&var) {
@@ -36,10 +47,15 @@ impl<'s> Substitution<'s> {
         v
     }
 
+    /// Attempt to resolve any variables contained in `v`.
     pub(super) fn walk_star(&self, v: &Value) -> Value {
         self.walk(v).walk_star(self)
     }
 
+    /// Extend substitution with a variable => value mapping.
+    ///
+    /// Returns `None` if the insertion would result in a
+    /// cyclic substitution.
     pub fn extend(mut self, x: Var, v: Value) -> Option<Self> {
         if self.occurs(&x, &v) {
             None
@@ -49,11 +65,14 @@ impl<'s> Substitution<'s> {
         }
     }
 
+    /// Returns `true` if `v` contains a variable that is equivalent
+    /// to `x` when this substitution.
     pub fn occurs(&self, x: &Var, v: &Value) -> bool {
         let v = self.walk(v);
         v.occurs(x, self)
     }
 
+    /// Attempt to unify `Value`s `u` and `v` under this substitution.
     pub fn unify(self, u: &Value, v: &Value) -> Option<Self> {
         let u = self.walk(u);
         let v = self.walk(v);
@@ -71,10 +90,13 @@ impl<'s> Substitution<'s> {
         u.unify(&v, self)
     }
 
+    /// Substitute all variables that remain fresh in `v` with reified variables.
     pub(super) fn reify_s(self, v: &Value) -> Self {
         self.walk(v).clone().reify_s(self)
     }
 
+    /// Replace all variables contained in `v` with their substituted
+    /// values and reify variables without substitution.
     pub fn reify(&self, v: &Value) -> Value {
         let v = self.walk_star(v);
         let r = Substitution::empty().reify_s(&v);
@@ -96,6 +118,7 @@ impl std::fmt::Debug for Substitution<'_> {
     }
 }
 
+/// Construct a substitution
 #[macro_export]
 macro_rules! substitution {
     () => {Substitution{ subs: Cow::Owned(HashMap::new())}};

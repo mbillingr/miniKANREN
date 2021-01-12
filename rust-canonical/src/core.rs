@@ -1,3 +1,5 @@
+//! Core data structures and logic algorithms
+
 pub mod goal;
 pub mod logic_variable;
 pub mod stream;

@@ -1,3 +1,7 @@
+//! Macros for embedding miniKANREN as DSL in Rust
+
+
+/// Creates a goal that succeeds if any of its subgoals succeeds
 #[macro_export]
 macro_rules! disj {
     () => { fail() };
@@ -5,6 +9,7 @@ macro_rules! disj {
     ($g0:expr; $($g:expr);*) => { disj2($g0, disj!($($g);*))}
 }
 
+/// Creates a goal that succeeds if all of its subgoals succeed
 #[macro_export]
 macro_rules! conj {
     () => { succeed() };
@@ -12,9 +17,12 @@ macro_rules! conj {
     ($g0:expr, $($g:expr),*) => { conj2($g0, conj!($($g),*))}
 }
 
+/// Define a relation.
+/// A relation is a function that creates a goal.
 #[macro_export]
 macro_rules! defrel {
-    (pub $name:ident($($args:ident),*) { $($g:expr),* $(,)? }) => {
+    ($(#[$outer:meta])* pub $name:ident($($args:ident),*) { $($g:expr),* $(,)? }) => {
+        $(#[$outer])*
         pub fn $name($($args: impl 'static + Into<Value>),*) -> impl Goal<StatSubs> {
             $(
                 let $args = $args.into();
@@ -28,7 +36,8 @@ macro_rules! defrel {
         }
     };
 
-    ($name:ident($($args:ident),*) { $($g:expr),* $(,)? }) => {
+    ($(#[$outer:meta])* $name:ident($($args:ident),*) { $($g:expr),* $(,)? }) => {
+        $(#[$outer])*
         fn $name($($args: impl 'static + Into<Value>),*) -> impl Goal<StatSubs> {
             $(
                 let $args = $args.into();
@@ -53,6 +62,17 @@ macro_rules! defrel {
     };
 }
 
+/// Run one or more goals.
+///
+/// The syntax `run!(n, var(s), goal1, goal2, ...)` produces at most n
+/// solutions in Scheme you wold write `(run n var(s) goal1 goal2 ...)`.
+/// The syntax `run!(*, var(s), goal1, goal2, ...)` produces all
+/// solutions in Scheme you wold write `(run* var(s) goal1 goal2 ...)`.
+/// The latter may result in an infinite recursion which eventually
+/// crashes with a stack overflow.
+///
+/// We support an additional syntax `run!(var(s), goal1, goal2, ...)`
+/// that returns a (possibly infinite) iterator over all solutions.
 #[macro_export]
 macro_rules! run {
     (*, ($($x:ident),*), $($body:tt)*) => {
@@ -108,6 +128,7 @@ macro_rules! run {
     }};
 }
 
+/// Bind fresh variables with scope inside the body of `fresh!`.
 #[macro_export]
 macro_rules! fresh {
     (($($x:ident),*), $($g:expr),* $(,)?) => {{
@@ -116,6 +137,11 @@ macro_rules! fresh {
     }}
 }
 
+/// Creates a goal that succeeds if any of its *lines* succeeds.
+/// Every successful *line* contributes one or more values.
+///
+/// A *line* (separated by `;`) succeeds if all of its
+/// goals (separated by `,`) succeed.
 #[macro_export]
 macro_rules! conde {
     ( $($($g:expr),*);*) => {
@@ -123,6 +149,11 @@ macro_rules! conde {
     }
 }
 
+/// Creates a goal that succeeds if any of its *lines* succeeds.
+/// Only the first *line* that succeeds can contribute values.
+///
+/// A *line* (separated by `;`) succeeds if all of its
+/// goals (separated by `,`) succeed.
 #[macro_export]
 macro_rules! conda {
     ($($g:expr),*) => { conj!($($g),*) };
@@ -132,6 +163,8 @@ macro_rules! conda {
     };
 }
 
+/// `Condu!` behaves like `conda!`, except that a successful line
+/// succeeds only once.
 #[macro_export]
 macro_rules! condu {
     ( $($g0:expr, $($g:expr),*);*) => {

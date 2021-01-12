@@ -1,51 +1,33 @@
+//! Logic-aware data structures
+
 use crate::core::logic_variable::{ReifiedVar, Var};
 use crate::core::substitution::Substitution;
 use crate::core::value::Value;
 use std::any::Any;
 use std::sync::Arc;
+use std::rc::Rc;
 
+/// Trait implemented by all logic-compatible types
 pub trait Structure: std::any::Any + std::fmt::Debug {
+    /// Returns `true` if `self` contains a variable that is equivalent
+    /// to `x` when considering substitution `s`.
     fn occurs<'s>(&self, x: &Var, s: &Substitution<'s>) -> bool;
+
+    /// Attempt to unify `self` with `Value` `v` under substitution `s`.
     fn unify<'s>(&self, v: &Value, s: Substitution<'s>) -> Option<Substitution<'s>>;
+
+    /// Recursively replace any variables contained in `self` with
+    /// their substituted values.
     fn walk_star(self: Arc<Self>, s: &Substitution<'_>) -> Value;
+
+    /// Substitute all variables that remain fresh in `self` with reified variables.
     fn reify_s<'s>(&self, s: Substitution<'s>) -> Substitution<'s>;
 
+    /// Cast to `Any` reference.
     fn as_any(&self) -> &dyn Any;
 
+    /// Return `true` if `self` is equivalent to `other`.
     fn eqv(&self, other: &Value) -> bool;
-}
-
-impl<T: 'static + Atomic + PartialEq> Structure for T {
-    fn occurs<'s>(&self, _x: &Var, _s: &Substitution<'s>) -> bool {
-        false
-    }
-
-    fn unify<'s>(&self, v: &Value, s: Substitution<'s>) -> Option<Substitution<'s>> {
-        if self.eqv(v) {
-            Some(s)
-        } else {
-            None
-        }
-    }
-
-    fn walk_star(self: Arc<Self>, _: &Substitution<'_>) -> Value {
-        Value::from_arc(self)
-    }
-
-    fn reify_s<'s>(&self, s: Substitution<'s>) -> Substitution<'s> {
-        s
-    }
-
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-
-    fn eqv(&self, other: &Value) -> bool {
-        other
-            .downcast_ref::<T>()
-            .map(|o| o == self)
-            .unwrap_or(false)
-    }
 }
 
 impl Structure for Var {
@@ -79,7 +61,7 @@ impl Structure for Var {
 
     fn eqv(&self, other: &Value) -> bool {
         other
-            .downcast_ref::<Var>()
+            .downcast_ref::<Self>()
             .map(|v| v == self)
             .unwrap_or(false)
     }
@@ -108,7 +90,7 @@ impl Structure for ReifiedVar {
 
     fn eqv(&self, other: &Value) -> bool {
         other
-            .downcast_ref::<ReifiedVar>()
+            .downcast_ref::<Self>()
             .map(|v| v == self)
             .unwrap_or(false)
     }
@@ -123,14 +105,11 @@ impl Structure for Option<Value> {
     }
 
     fn unify<'s>(&self, v: &Value, s: Substitution<'s>) -> Option<Substitution<'s>> {
-        if let Some(other) = v.downcast_ref::<Self>() {
-            match (self, other) {
-                (Some(su), Some(sv)) => s.unify(su, sv),
-                (None, None) => Some(s),
-                _ => None,
-            }
-        } else {
-            None
+        let other = v.downcast_ref::<Self>()?;
+        match (self, other) {
+            (Some(su), Some(sv)) => s.unify(su, sv),
+            (None, None) => Some(s),
+            _ => None,
         }
     }
 
@@ -153,11 +132,10 @@ impl Structure for Option<Value> {
     }
 
     fn eqv(&self, other: &Value) -> bool {
-        if let Some(o) = other.downcast_ref::<Self>() {
-            self == o
-        } else {
-            false
-        }
+        other
+            .downcast_ref::<Self>()
+            .map(|v| v == self)
+            .unwrap_or(false)
     }
 }
 
@@ -167,12 +145,9 @@ impl Structure for (Value, Value) {
     }
 
     fn unify<'s>(&self, v: &Value, s: Substitution<'s>) -> Option<Substitution<'s>> {
-        if let Some(other) = v.downcast_ref::<Self>() {
-            s.unify(&self.0, &other.0)
-                .and_then(|s| s.unify(&self.1, &other.1))
-        } else {
-            None
-        }
+        let other = v.downcast_ref::<Self>()?;
+        s.unify(&self.0, &other.0)
+            .and_then(|s| s.unify(&self.1, &other.1))
     }
 
     fn walk_star(self: Arc<Self>, s: &Substitution<'_>) -> Value {
@@ -188,14 +163,48 @@ impl Structure for (Value, Value) {
     }
 
     fn eqv(&self, other: &Value) -> bool {
-        if let Some(o) = other.downcast_ref::<Self>() {
-            self == o
-        } else {
-            false
-        }
+        other
+            .downcast_ref::<Self>()
+            .map(|v| v == self)
+            .unwrap_or(false)
     }
 }
 
+
+impl<T: 'static + Atomic + PartialEq> Structure for T {
+    fn occurs<'s>(&self, _x: &Var, _s: &Substitution<'s>) -> bool {
+        false
+    }
+
+    fn unify<'s>(&self, v: &Value, s: Substitution<'s>) -> Option<Substitution<'s>> {
+        if self.eqv(v) {
+            Some(s)
+        } else {
+            None
+        }
+    }
+
+    fn walk_star(self: Arc<Self>, _: &Substitution<'_>) -> Value {
+        Value::from_arc(self)
+    }
+
+    fn reify_s<'s>(&self, s: Substitution<'s>) -> Substitution<'s> {
+        s
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+
+    fn eqv(&self, other: &Value) -> bool {
+        other
+            .downcast_ref::<Self>()
+            .map(|o| o == self)
+            .unwrap_or(false)
+    }
+}
+
+/// Marker trait for types that contain no further values
 pub trait Atomic: std::fmt::Debug {}
 
 impl Atomic for () {}
@@ -232,4 +241,7 @@ impl Atomic for String {}
 
 impl Atomic for &str {}
 
+impl<T: Atomic> Atomic for Option<T> {}
 impl<T: Atomic> Atomic for Box<T> {}
+impl<T: Atomic> Atomic for Arc<T> {}
+impl<T: Atomic> Atomic for Rc<T> {}

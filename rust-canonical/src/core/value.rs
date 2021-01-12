@@ -1,9 +1,11 @@
+//! Dynamic values
 use crate::core::logic_variable::{ReifiedVar, Var};
 use crate::core::structure::{Atomic, Structure};
 use crate::core::substitution::Substitution;
 use std::fmt::Formatter;
 use std::sync::Arc;
 
+/// Dynamic value
 #[derive(Clone)]
 pub struct Value(Arc<dyn Structure>);
 
@@ -14,29 +16,37 @@ impl PartialEq for Value {
 }
 
 impl Value {
+    /// Construct a new value
     pub fn new(val: impl Into<Value>) -> Self {
         val.into()
     }
 
+    /// Construct pre-Arc'd value
     pub fn from_arc<T: Structure>(x: Arc<T>) -> Self {
         Value(x)
     }
 
+    /// Construct a value representing a variable
     pub fn var(v: Var) -> Self {
         Value::new(v)
     }
+
+    /// Construct a value representing a reified variable
     pub fn rv(i: usize) -> Self {
         Value::new(ReifiedVar(i))
     }
 
+    /// Construct a pair from two values
     pub fn cons(car: impl Into<Value>, cdr: impl Into<Value>) -> Self {
         Value::new((car.into(), cdr.into()))
     }
 
+    /// Cast to `Var` if the value represents a variable
     pub fn try_as_var(&self) -> Option<Var> {
         self.downcast_ref().copied()
     }
 
+    /// Try to cast to concrete type
     pub fn downcast_ref<T: 'static>(&self) -> Option<&T> {
         self.0.as_any().downcast_ref()
     }
@@ -91,6 +101,7 @@ impl std::fmt::Debug for Value {
 }
 
 impl From<Vec<Value>> for Value {
+    /// Convert `Vec<Value>` into a linked list of values.
     fn from(items: Vec<Value>) -> Self {
         let mut list = Value::from(());
         for v in items.into_iter().rev() {

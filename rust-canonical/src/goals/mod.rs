@@ -1,3 +1,5 @@
+//! Library of goals
+
 use crate::core::substitution::Substitution;
 
 pub mod list;

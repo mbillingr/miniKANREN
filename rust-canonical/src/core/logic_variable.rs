@@ -2,6 +2,12 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 
 static VAR_COUNTER: AtomicUsize = AtomicUsize::new(0);
 
+/// Named logic variable.
+///
+/// The variable name is purely descriptive to help understanding.
+/// Any newly created variables is different from all previously
+/// created variables, even if they have the same name.
+/// However, variables can be copied, which preserves identity.
 #[derive(Copy, Clone, PartialEq, Eq, Hash)]
 pub struct Var {
     name: &'static str,
@@ -9,12 +15,14 @@ pub struct Var {
 }
 
 impl Var {
+    /// Create a new unique logic variable.
     pub fn new(name: &'static str) -> Self {
         // The C++ reference says: "typical use for relaxed memory is incrementing counters"
         let id = VAR_COUNTER.fetch_add(1, Ordering::Relaxed);
         Var { name, id }
     }
 
+    /// Return the variable's name.
     pub fn name(&self) -> &str {
         self.name
     }
@@ -32,6 +40,10 @@ impl std::fmt::Debug for Var {
     }
 }
 
+/// Reified logic variable.
+///
+/// Reified variables represent logic variables that remain fresh
+/// after goals have run.
 #[derive(Copy, Clone, PartialEq, Eq)]
 pub struct ReifiedVar(pub usize);
 
