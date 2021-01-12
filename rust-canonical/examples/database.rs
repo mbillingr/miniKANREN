@@ -34,6 +34,10 @@ fn main() {
     let db = Arc::new(db);
 
     // run a simple query
-    let men: Vec<_> = run!(q, vitalo(&db, q, "dead")).collect();
+    let men: Vec<_> = run!(q, mano(&db, q)).collect();
     println!("All the men in the world: {:?}", men);
+
+    // run a simple query
+    let men: Vec<_> = run!(q, vitalo(&db, q, "dead")).collect();
+    println!("Dead people: {:?}", men);
 }
