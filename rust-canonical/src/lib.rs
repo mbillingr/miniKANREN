@@ -4,17 +4,6 @@ pub mod core;
 pub mod goals;
 pub mod prelude;
 
-use crate::core::logic_variable::Var;
-use crate::core::stream::Stream;
-use crate::goals::StatSubs;
-
-pub fn call_with_fresh_var<T: Fn(StatSubs) -> Stream<StatSubs>>(
-    name: &'static str,
-    f: impl Fn(Var) -> T,
-) -> T {
-    f(Var::new(name))
-}
-
 #[cfg(test)]
 mod tests {
     use crate::core::goal::Goal;
