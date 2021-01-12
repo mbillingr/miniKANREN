@@ -1,6 +1,10 @@
+use mini_kanren::core::stream::Stream;
+use mini_kanren::core::substitution::Substitution;
+use mini_kanren::database::Database;
+use mini_kanren::goals::StatSubs;
 use mini_kanren::prelude::*;
 use mini_kanren::*;
-use mini_kanren::database::Database;
+use std::sync::Arc;
 
 // declare relations
 db_rel! {
@@ -22,6 +26,6 @@ fn main() {
     }
 
     // run a simple query
-    let men: Vec<_> = run!(q, /*mano(q)*/).collect();
+    let men: Vec<_> = run!(q, mano(&db, q)).collect();
     println!("All the men in the world: {:?}", men);
 }
