@@ -1,3 +1,4 @@
+use crate::core::goal::Goal;
 use crate::core::logic_variable::Var;
 use crate::core::stream::Stream;
 use crate::core::value::Value;

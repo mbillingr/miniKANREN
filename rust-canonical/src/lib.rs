@@ -1,3 +1,4 @@
+use crate::core::goal::Goal;
 use crate::core::logic_variable::Var;
 use crate::core::stream::Stream;
 use crate::core::substitution::Substitution;
@@ -23,20 +24,21 @@ pub fn reify(v: Value) -> impl Fn(StatSubs) -> Value {
     }
 }
 
-pub fn run_goal(n: usize, g: impl Fn(StatSubs) -> Stream<StatSubs>) -> Stream<StatSubs> {
-    g(Substitution::empty()).take_inf(n)
+pub fn run_goal(n: usize, g: impl Goal<StatSubs>) -> Stream<StatSubs> {
+    g.apply(Substitution::empty()).take_inf(n)
 }
 
-pub fn run_goal_inf(g: impl Fn(StatSubs) -> Stream<StatSubs>) -> Stream<StatSubs> {
-    g(Substitution::empty()).take_inf_all()
+pub fn run_goal_inf(g: impl Goal<StatSubs>) -> Stream<StatSubs> {
+    g.apply(Substitution::empty()).take_inf_all()
 }
 
-pub fn iterate_goal(g: impl Fn(StatSubs) -> Stream<StatSubs>) -> impl Iterator<Item = StatSubs> {
-    g(Substitution::empty()).into_iter()
+pub fn iterate_goal(g: impl Goal<StatSubs>) -> impl Iterator<Item = StatSubs> {
+    g.apply(Substitution::empty()).into_iter()
 }
 
 #[cfg(test)]
 mod tests {
+    use crate::core::goal::Goal;
     use crate::core::logic_variable::{ReifiedVar, Var};
     use crate::core::stream::Stream;
     use crate::core::substitution::Substitution;
@@ -110,28 +112,28 @@ mod tests {
         );
 
         assert_eq!(
-            eq(x, Value::var(u.clone()))(Substitution::empty()),
+            eq(x, Value::var(u.clone())).apply(Substitution::empty()),
             Stream::singleton(substitution!(x: u))
         );
         assert_eq!(
-            eq(x, 42)(Substitution::empty()),
+            eq(x, 42).apply(Substitution::empty()),
             Stream::singleton(substitution!(x: 42))
         );
         assert_eq!(
-            eq(42, 42)(Substitution::empty()),
+            eq(42, 42).apply(Substitution::empty()),
             Stream::singleton(substitution!())
         );
-        assert_eq!(eq(42, 123)(Substitution::empty()), Stream::empty());
+        assert_eq!(eq(42, 123).apply(Substitution::empty()), Stream::empty());
 
-        assert_eq!(fail()(Substitution::empty()), Stream::Empty);
-        assert_eq!(eq(true, false)(Substitution::empty()), Stream::Empty);
+        assert_eq!(fail().apply(Substitution::empty()), Stream::Empty);
+        assert_eq!(eq(true, false).apply(Substitution::empty()), Stream::Empty);
         assert_eq!(
-            eq(x, y)(Substitution::empty()),
+            eq(x, y).apply(Substitution::empty()),
             Stream::singleton(substitution! {x: y})
         );
 
         assert_eq!(
-            disj2(eq("olive", x), eq("oil", x))(Substitution::empty()),
+            disj2(eq("olive", x), eq("oil", x)).apply(Substitution::empty()),
             Stream::cons(
                 substitution! {x: "olive"},
                 Stream::cons(substitution! {x: "oil"}, Stream::empty())
@@ -142,7 +144,7 @@ mod tests {
         //assert_eq!(nevero()(Substitution::empty()).take_inf(1), Stream::Empty);
 
         assert_eq!(
-            alwayso()(Substitution::empty()).take_inf(3),
+            alwayso().apply(Substitution::empty()).take_inf(3),
             Stream::from_iter(
                 vec![
                     Substitution::empty(),
@@ -154,19 +156,20 @@ mod tests {
         );
 
         assert_eq!(
-            disj2(eq("olive", x), eq("oil", x))(Substitution::empty())
+            disj2(eq("olive", x), eq("oil", x))
+                .apply(Substitution::empty())
                 .take_inf(5)
                 .len(),
             Some(2)
         );
 
         assert_eq!(
-            conj2(eq("olive", x), eq("oil", x))(Substitution::empty()),
+            conj2(eq("olive", x), eq("oil", x)).apply(Substitution::empty()),
             Stream::empty()
         );
 
         assert_eq!(
-            conj2(eq("olive", x), eq(y.clone(), x.clone()))(Substitution::empty()),
+            conj2(eq("olive", x), eq(y.clone(), x.clone())).apply(Substitution::empty()),
             Stream::singleton(substitution! {y: "olive", x: "olive"})
         );
 
@@ -207,17 +210,17 @@ mod tests {
         );
 
         assert_eq!(
-            ifte(succeed(), eq(false, y.clone()), eq(true, y.clone()))(Substitution::empty()),
+            ifte(succeed(), eq(false, y.clone()), eq(true, y.clone())).apply(Substitution::empty()),
             Stream::singleton(substitution!(y: false))
         );
 
         assert_eq!(
-            ifte(fail(), eq(false, y.clone()), eq(true, y.clone()))(Substitution::empty()),
+            ifte(fail(), eq(false, y.clone()), eq(true, y.clone())).apply(Substitution::empty()),
             Stream::singleton(substitution!(y: true))
         );
 
         assert_eq!(
-            disj!(eq("virgin", x); eq("olive", x); eq("oil", x))(Substitution::empty()),
+            disj!(eq("virgin", x); eq("olive", x); eq("oil", x)).apply(Substitution::empty()),
             Stream::from_iter(
                 vec![
                     substitution! {x: "virgin"},
@@ -235,14 +238,18 @@ mod tests {
         }
 
         assert_eq!(
-            teacup(x.clone())(Substitution::empty())
+            teacup(x.clone())
+                .apply(Substitution::empty())
                 .into_iter()
                 .collect::<Vec<_>>(),
             vec![substitution!(x: "tea"), substitution!(x: "cup")]
         );
 
         assert_eq!(
-            format!("{:?}", fresh!((x, y), eq(x, y))(Substitution::empty())),
+            format!(
+                "{:?}",
+                fresh!((x, y), eq(x, y)).apply(Substitution::empty())
+            ),
             "({x: y})"
         );
 

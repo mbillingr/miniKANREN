@@ -23,7 +23,7 @@ macro_rules! conj {
 #[macro_export]
 macro_rules! defrel {
     (pub $name:ident($($args:ident),*) { $($g:expr),* $(,)? }) => {
-        pub fn $name($($args: impl 'static + Into<Value>),*) -> impl Fn(StatSubs) -> Stream<StatSubs> {
+        pub fn $name($($args: impl 'static + Into<Value>),*) -> impl Goal<StatSubs> {
             $(
                 let $args = $args.into();
             )*
@@ -31,13 +31,13 @@ macro_rules! defrel {
                 $(
                     let $args = $args.clone();
                 )*
-                Stream::suspension(move || conj!($($g),*)(s))
+                Stream::suspension(move || conj!($($g),*).apply(s))
             }
         }
     };
 
     ($name:ident($($args:ident),*) { $($g:expr),* $(,)? }) => {
-        fn $name($($args: impl 'static + Into<Value>),*) -> impl Fn(StatSubs) -> Stream<StatSubs> {
+        fn $name($($args: impl 'static + Into<Value>),*) -> impl Goal<StatSubs> {
             $(
                 let $args = $args.into();
             )*
@@ -45,7 +45,7 @@ macro_rules! defrel {
                 $(
                     let $args = $args.clone();
                 )*
-                Stream::suspension(move || conj!($($g),*)(s))
+                Stream::suspension(move || conj!($($g),*).apply(s))
             }
         }
     };

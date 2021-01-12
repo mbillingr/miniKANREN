@@ -1,3 +1,4 @@
+pub mod goal;
 pub mod logic_variable;
 pub mod stream;
 pub mod structure;

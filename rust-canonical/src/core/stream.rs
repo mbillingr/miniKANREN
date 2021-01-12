@@ -1,3 +1,4 @@
+use crate::core::goal::Goal;
 use std::sync::Arc;
 
 pub enum Stream<T> {
@@ -88,10 +89,10 @@ impl<T: 'static> Stream<T> {
         }
     }
 
-    pub fn append_map_inf(self, g: Arc<dyn Fn(T) -> Self>) -> Self {
+    pub fn append_map_inf(self, g: Arc<dyn Goal<T>>) -> Self {
         match self {
             Stream::Empty => Stream::Empty,
-            Stream::Pair(a, d) => Stream::append_inf(g(a), d.append_map_inf(g)),
+            Stream::Pair(a, d) => Stream::append_inf(g.apply(a), d.append_map_inf(g)),
             Stream::Suspension(sup) => Stream::Suspension(Box::new(|| sup().append_map_inf(g))),
         }
     }
