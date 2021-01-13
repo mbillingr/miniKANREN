@@ -112,8 +112,9 @@ impl From<Vec<Value>> for Value {
     }
 }
 
-impl From<(Value, Value)> for Value {
-    fn from(pair: (Value, Value)) -> Self {
+impl<A: Into<Value>, D: Into<Value>> From<(A, D)> for Value {
+    fn from(pair: (A, D)) -> Self {
+        let pair = (pair.0.into(), pair.1.into());
         Value::new(Pair::from(pair))
     }
 }
