@@ -353,7 +353,12 @@ mod tests {
 
     #[test]
     fn mulo_computes_product_of_two_values() {
-        has_unique_solution(run!(q, mulo(num(3), num(2), q)), num(6));
+        // TODO: this crashes because there although there is only one solution, the
+        //       goal does not fail when asked for the second solution but looks for
+        //       ever increasing numbers.
+        //    A) Fix the test?
+        //    B) Possible to break the recursion?
+        has_unique_solution(run!(q, mulo(num(2), num(3), q)), num(6));
     }
 
     #[test]
