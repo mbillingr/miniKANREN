@@ -143,7 +143,7 @@ macro_rules! fresh {
 /// goals (separated by `,`) succeed.
 #[macro_export]
 macro_rules! conde {
-    ( $($($g:expr),*);*) => {
+    ( $($($g:expr),*;)* ) => {
         disj!($(conj!( $($g),*));*)
     }
 }
@@ -166,7 +166,7 @@ macro_rules! conda {
 /// succeeds only once.
 #[macro_export]
 macro_rules! condu {
-    ( $($g0:expr, $($g:expr),*);*) => {
+    ( $($g0:expr, $($g:expr),*);* ) => {
         conda!($(once($gO), $($g),*);*)
     }
 }

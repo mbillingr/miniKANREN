@@ -67,24 +67,41 @@ defrel! {
 defrel! {
     /// Creates a goal that succeeds if p is a list.
     pub listo(l) {
-        conde!(
+        conde!{
             eq(l.clone(), ());
             fresh!{ (d),
                 cdro(l, d),
                 listo(d)
-            })
+            };
+        }
     }
 }
 
 defrel! {
     /// Creates a goal that succeeds if l is a list that contains x.
     pub membero(x, l) {
-        conde!(
+        conde!{
             caro(l.clone(), x.clone());
             fresh!{ (d),
                 cdro(l, d),
                 membero(x, d),
-            })
+            };
+        }
+    }
+}
+
+defrel! {
+    /// Creates a goal that succeeds if two lists can be appended two form a third.
+    pub appendo(a, b, l) {
+        conde!{
+            fresh!( (h, at, lt),
+                conso(h, at, a.clone()),
+                conso(h, lt, l.clone()),
+                appendo(at, b.clone(), lt),
+            );
+            eq(a.clone(), ()), eq(b.clone(), l.clone());
+            //eq(a.clone(), ()), eq(b.clone(), ()), eq(l.clone(), ());
+        }
     }
 }
 
@@ -94,12 +111,12 @@ mod tests {
     use crate::*;
 
     fn fails(goal: impl Goal<StatSubs>) {
-        let result = run!(*, q, goal);
+        let result = run!(1, q, goal);
         assert!(result.is_empty());
     }
 
     fn succeeds(goal: impl Goal<StatSubs>) {
-        let result = run!(*, q, goal);
+        let result = run!(1, q, goal);
         assert!(!result.is_empty());
     }
 
@@ -178,6 +195,68 @@ mod tests {
         assert_eq!(
             result.next().unwrap(),
             list![Value::rv(0), Value::rv(1), Value::new(42) ; Value::rv(2)]
+        );
+    }
+
+    #[test]
+    fn appendo_succeeds_when_inputs_match() {
+        succeeds(appendo((), (), ()));
+        succeeds(appendo(list![1], (), list![1]));
+        succeeds(appendo((), list![1], list![1]));
+        succeeds(appendo(list![1], list![2], list![1, 2]));
+        succeeds(appendo(list![1, 2], 3, list![1, 2 ; 3]));
+    }
+
+    #[test]
+    fn appendo_fails_when_first_argument_is_not_a_list() {
+        fails(fresh! {(q), appendo(0, (), q)});
+    }
+
+    #[test]
+    fn appendo_fails_when_third_argument_is_not_a_list() {
+        fails(fresh! {(q), appendo(q, (), 0)});
+    }
+
+    #[test]
+    fn appendo_fails_when_inputs_dont_match() {
+        fails(appendo(list![1], list![2], list![]));
+    }
+
+    #[test]
+    fn appending_an_empty_list_gives_same_list() {
+        let result = run!(3, q, appendo(q, (), q));
+        assert_eq!(
+            result.into_vec(),
+            vec![
+                list![],
+                list![Value::rv(0)],
+                list![Value::rv(0), Value::rv(1)]
+            ]
+        );
+    }
+
+    #[test]
+    fn appending_to_an_empty_list_gives_appended_value() {
+        let result = run!(*, q, appendo((), q, q));
+        assert_eq!(result.into_vec(), vec![Value::rv(0)]);
+    }
+
+    #[test]
+    fn appending_to_a_list() {
+        let result = run!(*, q, appendo(list![1, 2], q, list![1, 2 ; q]));
+        assert_eq!(result.into_vec(), vec![Value::rv(0)]);
+    }
+
+    #[test]
+    fn appending_arbitrary_list() {
+        let result = run!(3, q, fresh! { (a), appendo(a, list![2, 1], q)});
+        assert_eq!(
+            result.into_vec(),
+            vec![
+                list![2, 1],
+                list![Value::rv(0), 2, 1],
+                list![Value::rv(0), Value::rv(1), 2, 1]
+            ]
         );
     }
 }
