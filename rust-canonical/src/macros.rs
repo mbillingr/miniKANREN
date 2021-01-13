@@ -158,7 +158,7 @@ macro_rules! conda {
     ($($g:expr),*) => { conj!($($g),*) };
 
     ($g0:expr, $($g:expr),*; $($rest:tt)*) => {
-        ifte(g0, conj!($($g),*), conda!($($rest)*))
+        ifte($g0, conj!($($g),*), conda!($($rest)*))
     };
 }
 
