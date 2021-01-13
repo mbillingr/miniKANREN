@@ -37,7 +37,11 @@ fn main() {
     let men: Vec<_> = run!(q, mano(&db, q)).collect();
     println!("All the men in the world: {:?}", men);
 
-    // run a simple query
+    // run another simple query
     let men: Vec<_> = run!(q, vitalo(&db, q, "dead")).collect();
     println!("Dead people: {:?}", men);
+
+    // run a combined query
+    let dead_men: Vec<_> = run!(q, mano(&db, q), vitalo(&db, q, "dead")).collect();
+    println!("Dead people men: {:?}", dead_men);
 }
