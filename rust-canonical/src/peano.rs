@@ -10,8 +10,8 @@ use crate::core::stream::Stream;
 use crate::core::structure::Structure;
 use crate::core::substitution::Substitution;
 use crate::core::value::Value;
-use crate::goals::combinators::{conj2, disj2, ifte};
-use crate::goals::primitive::{eq, succeed};
+use crate::goals::combinators::{conj2, disj2};
+use crate::goals::primitive::eq;
 use crate::goals::StatSubs;
 use std::any::Any;
 use std::fmt::{self, Debug, Formatter};
@@ -31,10 +31,34 @@ pub fn zero(n: impl Into<Value>) -> impl Goal<StatSubs> {
     eq(Zero, n.into())
 }
 
+/// Creates a goal that succeeds if n is 1.
+pub fn oneo(n: impl Into<Value>) -> impl Goal<StatSubs> {
+    eq(num(1), n.into())
+}
+
 defrel! {
     /// Creates a goal that succeeds if b is one more than a.
     pub inco(a, b) {
         eq(OneMore(a), b)
+    }
+}
+
+defrel! {
+    /// Creates a goal that succeeds if n is a positive number greater than zero.
+    pub poso(n) {
+        fresh!{ (x),
+            inco(x, n)
+        }
+    }
+}
+
+defrel! {
+    /// Creates a goal that succeeds if n is a positive number greater than one.
+    pub gt1o(n) {
+        fresh!{ (x),
+            poso(x),
+            inco(x, n)
+        }
     }
 }
 
@@ -69,36 +93,33 @@ defrel! {
     /// Creates a goal that succeeds if a * b equals c
     pub mulo(a, b, c) {
         fresh!{ (a0, c0),
-            ifte(
-                conj!(inco(a0, a.clone()), addo(c0, b.clone(), c.clone()), mulo(a0, b.clone(), c0)),
-                succeed(),
-                ifte(
-                    conj!(eq(a.clone(), num(1)), eq(b.clone(), c.clone())),
-                    succeed(),
-                    ifte(
-                        conj!(eq(b.clone(), num(1)), eq(a.clone(), c.clone())),
-                        succeed(),
-                        ifte(
-                            conj!(eq(a.clone(), num(0)), eq(c.clone(), num(0))),
-                            succeed(),
-                            conj!(eq(b.clone(), num(0)), eq(c.clone(), num(0)))
-                        )
-                    )
-                )
-            )
-            /*conda!{
+            conde!{
+                // 0 * anything == 0
+                zero(a.clone()),
+                zero(c.clone());
+
+                // (a>0) * 0 == 0
+                poso(a.clone()),
+                zero(b.clone()),
+                zero(c.clone());
+
+                // 1 * (b>0) == b
+                oneo(a.clone()),
+                poso(b.clone()),
+                eq(b.clone(), c.clone());
+
+                // (a>1) * 1 == a
+                gt1o(a.clone()),
+                oneo(b.clone()),
+                eq(a.clone(), c.clone());
+
+                // (a>1) * (b>1) == (a-1) * b + b
+                gt1o(a.clone()),
+                gt1o(b.clone()),
                 inco(a0, a.clone()),
                 addo(c0, b.clone(), c.clone()),
-                mulo(a0, b.clone(), c0);
-
-                eq(a.clone(), num(1)), eq(b.clone(), c.clone());
-
-                eq(b.clone(), num(1)), eq(a.clone(), c.clone());
-
-                eq(a.clone(), num(0)), eq(c.clone(), num(0));
-
-                eq(b.clone(), num(0)), eq(c.clone(), num(0));
-            }*/
+                mulo(a0, b, c0);
+            }
         }
     }
 }
@@ -336,6 +357,13 @@ mod tests {
     }
 
     #[test]
+    fn mulo_combinations() {
+        for solution in run!((a, b, c), mulo(a, b, c)).take(20) {
+            println!("{:?}", solution);
+        }
+    }
+
+    #[test]
     fn mulo_computes_quotients() {
         has_unique_solution(run!(q, mulo(num(3), q, num(12))), num(4));
         has_unique_solution(run!(q, mulo(q, num(4), num(12))), num(3));
@@ -351,10 +379,12 @@ mod tests {
         assert_eq!(
             run!(*, (a, b), mulo(a, b, num(6))).into_vec(),
             vec![
+                // Actually, the order does not matter but this
+                // is what we get with the current implementation.
                 list![num(1), num(6)],
+                list![num(6), num(1)],
                 list![num(2), num(3)],
                 list![num(3), num(2)],
-                list![num(6), num(1)]
             ]
         );
     }
