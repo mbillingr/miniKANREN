@@ -1,5 +1,6 @@
 //! Dynamic values
 use crate::core::logic_variable::{ReifiedVar, Var};
+use crate::core::pair::Pair;
 use crate::core::structure::{Atomic, Structure};
 use crate::core::substitution::Substitution;
 use std::fmt::Formatter;
@@ -108,5 +109,11 @@ impl From<Vec<Value>> for Value {
             list = Value::cons(v, list);
         }
         list
+    }
+}
+
+impl From<(Value, Value)> for Value {
+    fn from(pair: (Value, Value)) -> Self {
+        Value::new(Pair::from(pair))
     }
 }

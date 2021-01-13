@@ -139,37 +139,6 @@ impl Structure for Option<Value> {
     }
 }
 
-impl Structure for (Value, Value) {
-    fn occurs<'s>(&self, x: &Var, s: &Substitution<'s>) -> bool {
-        s.occurs(x, &self.0) || s.occurs(x, &self.1)
-    }
-
-    fn unify<'s>(&self, v: &Value, s: Substitution<'s>) -> Option<Substitution<'s>> {
-        let other = v.downcast_ref::<Self>()?;
-        s.unify(&self.0, &other.0)
-            .and_then(|s| s.unify(&self.1, &other.1))
-    }
-
-    fn walk_star(self: Arc<Self>, s: &Substitution<'_>) -> Value {
-        (s.walk_star(&self.0), s.walk_star(&self.1)).into()
-    }
-
-    fn reify_s<'s>(&self, s: Substitution<'s>) -> Substitution<'s> {
-        s.reify_s(&self.0).reify_s(&self.1)
-    }
-
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-
-    fn eqv(&self, other: &Value) -> bool {
-        other
-            .downcast_ref::<Self>()
-            .map(|v| v == self)
-            .unwrap_or(false)
-    }
-}
-
 impl<T: 'static + Atomic + PartialEq> Structure for T {
     fn occurs<'s>(&self, _x: &Var, _s: &Substitution<'s>) -> bool {
         false

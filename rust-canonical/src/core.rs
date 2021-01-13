@@ -2,6 +2,7 @@
 
 pub mod goal;
 pub mod logic_variable;
+pub mod pair;
 pub mod stream;
 pub mod structure;
 pub mod substitution;
