@@ -108,17 +108,8 @@ defrel! {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::testing::{fails, succeeds};
     use crate::*;
-
-    fn fails(goal: impl Goal<StatSubs>) {
-        let result = run!(1, q, goal);
-        assert!(result.is_empty());
-    }
-
-    fn succeeds(goal: impl Goal<StatSubs>) {
-        let result = run!(1, q, goal);
-        assert!(!result.is_empty());
-    }
 
     #[test]
     fn pairo_binds_pair_to_variable() {

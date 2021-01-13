@@ -38,7 +38,7 @@ impl<'s> Substitution<'s> {
     ///
     /// If the `v` is no variable or a variable that cannot be
     /// resolved (i.e. it is not substituted), `v` is returned.
-    pub(super) fn walk<'a>(&'a self, v: &'a Value) -> &'a Value {
+    pub fn walk<'a>(&'a self, v: &'a Value) -> &'a Value {
         if let Some(var) = v.try_as_var() {
             if let Some(next) = self.subs.get(&var) {
                 return self.walk(next);
@@ -48,7 +48,7 @@ impl<'s> Substitution<'s> {
     }
 
     /// Attempt to resolve any variables contained in `v`.
-    pub(super) fn walk_star(&self, v: &Value) -> Value {
+    pub fn walk_star(&self, v: &Value) -> Value {
         self.walk(v).walk_star(self)
     }
 
@@ -91,7 +91,7 @@ impl<'s> Substitution<'s> {
     }
 
     /// Substitute all variables that remain fresh in `v` with reified variables.
-    pub(super) fn reify_s(self, v: &Value) -> Self {
+    pub fn reify_s(self, v: &Value) -> Self {
         self.walk(v).clone().reify_s(self)
     }
 

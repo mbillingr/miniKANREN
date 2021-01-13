@@ -4,8 +4,11 @@
 mod macros;
 pub mod core;
 pub mod database;
+#[macro_use]
 pub mod goals;
+pub mod peano;
 pub mod prelude;
+pub mod testing;
 
 #[cfg(test)]
 mod tests {
