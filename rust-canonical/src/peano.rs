@@ -79,11 +79,15 @@ defrel! {
     /// Creates a goal that succeeds if a + b equals c
     pub addo(a, b, c) {
         conde!{
-            eq(b.clone(), Zero), eq(a.clone(), c.clone());
-            fresh!{ (b0, c0),
-                inco(b0, b.clone()),
-                inco(c0, c.clone()),
-                addo(a.clone(), b0, c0),
+            // 0 + b == b
+            eq(a.clone(), Zero),
+            eq(b.clone(), c.clone());
+
+            // (a>0) + b == c  =>  b + (a-1) == (c-1)
+            fresh!{ (a0, c0),
+                inco(a0, a),
+                inco(c0, c),
+                addo(b, a0, c0),
             };
         }
     }
@@ -94,7 +98,7 @@ defrel! {
     pub mulo(a, b, c) {
         fresh!{ (a0, c0),
             conde!{
-                // 0 * anything == 0
+                // 0 * b == 0
                 zero(a.clone()),
                 zero(c.clone());
 
@@ -113,7 +117,7 @@ defrel! {
                 oneo(b.clone()),
                 eq(a.clone(), c.clone());
 
-                // (a>1) * (b>1) == (a-1) * b + b
+                // (a>1) * (b>1) == c  =>  (a-1) * b == c-b
                 gt1o(a.clone()),
                 gt1o(b.clone()),
                 inco(a0, a.clone()),
@@ -299,10 +303,10 @@ mod tests {
         assert_eq!(
             run!(*, (a, b), addo(a, b, num(3))).into_vec(),
             vec![
-                list![num(3), num(0)],
-                list![num(2), num(1)],
-                list![num(1), num(2)],
                 list![num(0), num(3)],
+                list![num(3), num(0)],
+                list![num(1), num(2)],
+                list![num(2), num(1)],
             ]
         );
     }
