@@ -1,5 +1,5 @@
 use mini_kanren::prelude::*;
-use mini_kanren::*;
+use mini_kanren::run;
 
 fn main() {
     println!("Hello from an example!");

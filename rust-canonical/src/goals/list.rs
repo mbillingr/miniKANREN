@@ -1,32 +1,27 @@
 use crate::core::goal::Goal;
-use crate::core::logic_variable::Var;
-use crate::core::stream::Stream;
-use crate::core::value::Value;
-use crate::goals::combinators::{conj2, disj2};
 use crate::goals::numbers::{inco, zero};
 use crate::goals::primitive::eq;
-use crate::goals::StatSubs;
-use crate::{conde, conj, defrel, disj, fresh};
+use crate::{conde, defrel, fresh};
 
 /// Constructs a cons list.
 #[macro_export]
 macro_rules! list {
-    () => { Value::new(()) };
+    () => { $crate::prelude::Value::new(()) };
 
     ($single:expr) => {
-        Value::cons($single, ())
+        $crate::prelude::Value::cons($single, ())
     };
 
     ($car:expr ; $cdr:expr) => {
-        Value::cons($car, $cdr)
+        $crate::prelude::Value::cons($car, $cdr)
     };
 
     (($($first:tt)*), $($rest:tt)*) => {
-        Value::cons(list![$($first)*], list![$($rest)*])
+        $crate::prelude::Value::cons(list![$($first)*], list![$($rest)*])
     };
 
     ($first:expr, $($rest:tt)*) => {
-        Value::cons($first, list![$($rest)*])
+        $crate::prelude::Value::cons($first, list![$($rest)*])
     };
 
 }
@@ -127,6 +122,7 @@ defrel! {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::core::value::Value;
     use crate::goals::numbers::num;
     use crate::testing::{fails, succeeds};
     use crate::*;

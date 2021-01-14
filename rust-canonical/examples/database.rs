@@ -1,8 +1,6 @@
-use mini_kanren::core::stream::Stream;
 use mini_kanren::database::Database;
-use mini_kanren::goals::StatSubs;
 use mini_kanren::prelude::*;
-use mini_kanren::*;
+use mini_kanren::{db_facts, db_rel, disj, run};
 use std::sync::Arc;
 
 // declare relations

@@ -18,8 +18,7 @@ mod tests {
     use crate::core::value::Value;
     use crate::goals::combinators::{conj2, disj2, ifte};
     use crate::goals::primitive::{alwayso, eq, fail, succeed};
-    use crate::goals::StatSubs;
-    use crate::{conj, defrel, disj, fresh, run, substitution};
+    use crate::{defrel, disj, fresh, run, substitution};
     use std::borrow::Cow;
     use std::collections::HashMap;
 

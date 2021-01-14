@@ -42,10 +42,10 @@ macro_rules! db_rel {
     ($($rel:ident($($args:ident),*));* $(;)?) => {
         $(
             /// Creates a goal that succeeds if the relation is consistent with the database.
-            fn $rel(db: &Arc<Database>, $($args: impl Into<Value>),*) -> impl Goal<StatSubs> {
+            fn $rel(db: &Arc<$crate::database::Database>, $($args: impl Into<$crate::prelude::Value>),*) -> impl $crate::prelude::Goal<$crate::prelude::Substitution<'static>> {
                 let db = db.clone();
                 $(let $args = $args.into();)*
-                move |s: StatSubs| {
+                move |s: $crate::prelude::Substitution<'static>| {
                     let values = db.query(stringify!($rel));
                     let subs = values
                         .filter_map(|mut value| {
@@ -53,7 +53,7 @@ macro_rules! db_rel {
                             $(let s = s.unify(&$args, value.next()?)?;)*
                             Some(s)
                         });
-                    Stream::from_iter(subs)
+                    $crate::prelude::Stream::from_iter(subs)
                 }
             }
         )*
@@ -65,7 +65,7 @@ macro_rules! db_rel {
 macro_rules! db_facts {
     ($($db:ident { $($rel:ident($($args:expr),*));* $(;)? })*) => {
         $( $(
-            $db.insert(stringify!($rel), vec![$(Value::new($args)),*]);
+            $db.insert(stringify!($rel), vec![$($crate::prelude::Value::new($args)),*]);
         )* )*
     };
 }

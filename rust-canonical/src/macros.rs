@@ -3,17 +3,17 @@
 /// Creates a goal that succeeds if any of its subgoals succeeds
 #[macro_export]
 macro_rules! disj {
-    () => { fail() };
+    () => { $crate::prelude::fail() };
     ($g:expr) => { $g };
-    ($g0:expr; $($g:expr);*) => { disj2($g0, disj!($($g);*))}
+    ($g0:expr; $($g:expr);*) => { $crate::prelude::disj2($g0, $crate::disj!($($g);*))}
 }
 
 /// Creates a goal that succeeds if all of its subgoals succeed
 #[macro_export]
 macro_rules! conj {
-    () => { succeed() };
+    () => { $crate::prelude::succeed() };
     ($g:expr) => { $g };
-    ($g0:expr, $($g:expr),*) => { conj2($g0, conj!($($g),*))}
+    ($g0:expr, $($g:expr),*) => { $crate::prelude::conj2($g0, $crate::conj!($($g),*))}
 }
 
 /// Define a relation.
@@ -23,28 +23,28 @@ macro_rules! defrel {
 
     ($(#[$outer:meta])* pub $name:ident($($args:ident),*) { $($g:expr),* $(,)? }) => {
         $(#[$outer])*
-        pub fn $name($($args: impl 'static + Into<Value>),*) -> impl Goal<StatSubs> {
+        pub fn $name($($args: impl 'static + Into<$crate::prelude::Value>),*) -> impl $crate::prelude::Goal<$crate::prelude::Substitution<'static>> {
             defrel!(@body: $($args),* { $($g),* })
         }
     };
 
     ($(#[$outer:meta])* $name:ident($($args:ident),*) { $($g:expr),* $(,)? }) => {
         $(#[$outer])*
-        fn $name($($args: impl 'static + Into<Value>),*) -> impl Goal<StatSubs> {
+        fn $name($($args: impl 'static + Into<$crate::prelude::Value>),*) -> impl $crate::prelude::Goal<$crate::prelude::Substitution<'static>> {
             defrel!(@body: $($args),* { $($g),* })
         }
     };
 
     ($(#[$outer:meta])* pub trace $name:ident($($args:ident),*) { $($g:expr),* $(,)? }) => {
         $(#[$outer])*
-        pub fn $name($($args: impl 'static + Into<Value>),*) -> impl Goal<StatSubs> {
+        pub fn $name($($args: impl 'static + Into<$crate::prelude::Value>),*) -> impl $crate::prelude::Goal<$crate::prelude::Substitution<'static>> {
             defrel!(@tracebody: $name, $($args),* { $($g),* })
         }
     };
 
     ($(#[$outer:meta])* trace $name:ident($($args:ident),*) { $($g:expr),* $(,)? }) => {
         $(#[$outer])*
-        fn $name($($args: impl 'static + Into<Value>),*) -> impl Goal<StatSubs> {
+        fn $name($($args: impl 'static + Into<$crate::prelude::Value>),*) -> impl $crate::prelude::Goal<$crate::prelude::Substitution<'static>> {
             defrel!(@tracebody: $name, $($args),* { $($g),* })
         }
     };
@@ -67,7 +67,7 @@ macro_rules! defrel {
             $(
                 let $args = $args.clone();
             )*
-            Stream::suspension(move || conj!($($g),*).apply(s))
+            $crate::prelude::Stream::suspension(move || $crate::conj!($($g),*).apply(s))
         }
     }};
 
@@ -75,7 +75,7 @@ macro_rules! defrel {
         $(
             let $args = $args.into();
         )*
-        move |s: crate::core::substitution::Substitution<'static>| {
+        move |s: $crate::prelude::Substitution<'static>| {
             {
                 print!("{} apply:", stringify!($name));
                 let sx = {
@@ -83,10 +83,10 @@ macro_rules! defrel {
                         let $args = $args.clone();
                         print!(" {}={:?}", stringify!($args), s.reify(&$args));
                     )*
-                    conj!($($g),*).apply(s.clone())
+                    $crate::conj!($($g),*).apply(s.clone())
                 };
                 match sx {
-                   Stream::Pair(first_sub, next) => {
+                   $crate::prelude::Stream::Pair(first_sub, next) => {
                         print!(" succeeded with");
                         $(print!(" {}={:?}", stringify!($args), first_sub.reify(&$args));)*
                         if next.is_empty() {
@@ -95,8 +95,8 @@ macro_rules! defrel {
                             println!(" ...");
                         }
                    }
-                   Stream::Suspension(_) => println!(" ..."),
-                   Stream::Empty => println!(" failed."),
+                   $crate::prelude::Stream::Suspension(_) => println!(" ..."),
+                   $crate::prelude::Stream::Empty => println!(" failed."),
                 }
             }
 
@@ -104,8 +104,8 @@ macro_rules! defrel {
                 let $args = $args.clone();
             )*
 
-            Stream::suspension(move || {
-                let sx = conj!($($g),*).apply(s);
+            $crate::prelude::Stream::suspension(move || {
+                let sx = $crate::conj!($($g),*).apply(s);
                 sx
             })
         }
@@ -126,55 +126,55 @@ macro_rules! defrel {
 #[macro_export]
 macro_rules! run {
     (*, ($($x:ident),*), $($body:tt)*) => {
-        run!(@ *, ($($x),*), $($body)*)
+        $crate::run!(@ *, ($($x),*), $($body)*)
     };
 
     (*, $q:ident, $($g:expr),* $(,)?) => {
-        run!(@ *, $q, $($g),*)
+        $crate::run!(@ *, $q, $($g),*)
     };
 
     ($n:expr, ($($x:ident),*), $($body:tt)*) => {
-        run!(@ $n, ($($x),*), $($body)*)
+        $crate::run!(@ $n, ($($x),*), $($body)*)
     };
 
     ($n:tt, $q:ident, $($g:expr),* $(,)?) => {
-        run!(@ $n, $q, $($g),*)
+        $crate::run!(@ $n, $q, $($g),*)
     };
 
     (($($x:ident),*), $($body:tt)*) => {
-        run!(@ iter, ($($x),*), $($body)*)
+        $crate::run!(@ iter, ($($x),*), $($body)*)
     };
 
     ($q:ident, $($g:expr),* $(,)?) => {
-        run!(@ iter, $q, $($g),*)
+        $crate::run!(@ iter, $q, $($g),*)
     };
 
     (@ $n:tt, ($($x:ident),*), $($g:expr),* $(,)?) => {
-        run!(@ $n, q, {
-            fresh!(
+        $crate::run!(@ $n, q, {
+            $crate::fresh!(
                 ($($x),*),
-                eq(vec![$(Value::var($x.clone())),*], q),
+                $crate::prelude::eq(vec![$($crate::prelude::Value::var($x.clone())),*], q),
                 $($g),*
             )
         })
     };
 
     (@ *, $q:ident, $($g:expr),* $(,)?) => {{
-        let $q = Var::new(stringify!($q));
-        let var = Value::var($q.clone());
-        conj!($($g),*).run_inf().map(move |s| s.reify(&var))
+        let $q = $crate::prelude::Var::new(stringify!($q));
+        let var = $crate::prelude::Value::var($q.clone());
+        $crate::conj!($($g),*).run_inf().map(move |s| s.reify(&var))
     }};
 
     (@ iter, $q:ident, $($g:expr),* $(,)?) => {{
-        let $q = Var::new(stringify!($q));
-        let var = Value::var($q.clone());
-        conj!($($g),*).iter().map(move |s| s.reify(&var))
+        let $q = $crate::prelude::Var::new(stringify!($q));
+        let var = $crate::prelude::Value::var($q.clone());
+        $crate::conj!($($g),*).iter().map(move |s| s.reify(&var))
     }};
 
     (@ $n:expr, $q:ident, $($g:expr),* $(,)?) => {{
-        let $q = Var::new(stringify!($q));
-        let var = Value::var($q.clone());
-        conj!($($g),*).run($n).map(move |s| s.reify(&var))
+        let $q = $crate::prelude::Var::new(stringify!($q));
+        let var = $crate::prelude::Value::var($q.clone());
+        $crate::conj!($($g),*).run($n).map(move |s| s.reify(&var))
     }};
 }
 
@@ -182,8 +182,8 @@ macro_rules! run {
 #[macro_export]
 macro_rules! fresh {
     (($($x:ident),*), $($g:expr),* $(,)?) => {{
-        $( let $x = Var::new(stringify!($x)); )*
-        conj!($($g),*)
+        $( let $x = $crate::prelude::Var::new(stringify!($x)); )*
+        $crate::conj!($($g),*)
     }}
 }
 
@@ -195,7 +195,7 @@ macro_rules! fresh {
 #[macro_export]
 macro_rules! conde {
     ( $($($g:expr),*;)* ) => {
-        disj!($(conj!( $($g),*));*)
+        $crate::disj!($($crate::conj!( $($g),*));*)
     }
 }
 
@@ -206,10 +206,10 @@ macro_rules! conde {
 /// goals (separated by `,`) succeed.
 #[macro_export]
 macro_rules! conda {
-    ($($g:expr),*) => { conj!($($g),*) };
+    ($($g:expr),*) => { $crate::conj!($($g),*) };
 
     ($g0:expr, $($g:expr),*; $($rest:tt)*) => {
-        ifte($g0, conj!($($g),*), conda!($($rest)*))
+        $crate::prelude::ifte($g0, $crate::conj!($($g),*), $crate::conda!($($rest)*))
     };
 }
 
@@ -218,6 +218,6 @@ macro_rules! conda {
 #[macro_export]
 macro_rules! condu {
     ( $($g0:expr, $($g:expr),*);* ) => {
-        conda!($(once($gO), $($g),*);*)
+        $crate::conda!($($crate::prelude::once($gO), $($g),*);*)
     }
 }
