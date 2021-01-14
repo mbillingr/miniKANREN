@@ -60,23 +60,19 @@ defrel! {
     }
 }
 
-defrel! {
+defmatch! {
     /// Creates a goal that succeeds if p is a list.
     pub listo(l) {
-        matche!{ l,
-            () => ;
-            (_ ; tail) => listo(tail);
-        }
+        (()) => ;
+        ((_ ; tail)) => listo(tail);
     }
 }
 
-defrel! {
+defmatch! {
     /// Creates a goal that succeeds if l is a list that contains x.
     pub membero(x, l) {
-        matche!{ l,
-            (_ ; t) => membero(x.clone(), t);
-            ({x} ; _) => ;
-        }
+        (x, ({x} ; _)) => ;
+        (x, (_ ; t)) => membero(x, t);
     }
 }
 
@@ -94,13 +90,11 @@ defrel! {
     }
 }
 
-defrel! {
+defmatch! {
     /// Creates a goal that succeeds if the list has length n.
     pub lengtho(l, n) {
-        matche! { l,
-            () => zero(n.clone());
-            (_ ; tail) => fresh!{ (nt), inco(nt, n), lengtho(tail, nt) };
-        }
+        ((), n) => zero(n);
+        ((_ ; tail), n) => fresh!{ (nt), inco(nt, n), lengtho(tail, nt) };
     }
 }
 

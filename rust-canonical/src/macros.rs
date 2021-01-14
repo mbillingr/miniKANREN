@@ -112,6 +112,34 @@ macro_rules! defrel {
     }};
 }
 
+/// Define a relation.
+/// A relation is a function that creates a goal.
+#[macro_export]
+macro_rules! defmatch {
+
+    ($(#[$outer:meta])* pub $name:ident($($args:ident),*) { $($body:tt)* }) => {
+        defrel! {
+            $(#[$outer])*
+            pub $name($($args),*) {
+                $crate::matche! { list![$($args.clone()),*],
+                    $($body)*
+                }
+            }
+        }
+    };
+
+    ($(#[$outer:meta])* $name:ident($($args:ident),*) { $($body:tt)* }) => {
+        defrel! {
+            $(#[$outer])*
+            $name($($args),*) {
+                $crate::matche! { list![$($args.clone()),*],
+                    $($body)*
+                }
+            }
+        }
+    };
+}
+
 /// Run one or more goals.
 ///
 /// The syntax `run!(n, var(s), goal1, goal2, ...)` produces at most n
@@ -380,6 +408,19 @@ mod tests {
                 }
             ),
             list![42],
+        );
+    }
+
+    #[test]
+    fn matche_matches_values() {
+        has_unique_solution(
+            run!(
+                q,
+                matche! { list![1, q],
+                    (b, c) => eq(b, c);
+                }
+            ),
+            1.into(),
         );
     }
 }
