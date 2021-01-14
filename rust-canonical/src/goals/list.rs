@@ -6,6 +6,7 @@ use crate::goals::combinators::{conj2, disj2};
 use crate::goals::primitive::eq;
 use crate::goals::StatSubs;
 use crate::{conde, conj, defrel, disj, fresh};
+use crate::peano::{inco, zero};
 
 /// Constructs a cons list.
 #[macro_export]
@@ -105,11 +106,30 @@ defrel! {
     }
 }
 
+defrel! {
+    /// Creates a goal that succeeds if the list has length n.
+    pub lengtho(l, n) {
+        conde! {
+            // empty list has zero length
+            eq(l.clone(), ()),
+            zero(n.clone());
+
+            // pair has length one more than length of tail
+            fresh!{ (l0, n0),
+                cdro(l, l0),
+                inco(n0, n),
+                lengtho(l0, n0),
+            };
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::testing::{fails, succeeds};
     use crate::*;
+    use crate::peano::num;
 
     #[test]
     fn pairo_binds_pair_to_variable() {
@@ -249,5 +269,23 @@ mod tests {
                 list![Value::rv(0), Value::rv(1), 2, 1]
             ]
         );
+    }
+
+    #[test]
+    fn lengtho_is_zero_for_the_empty_list() {
+        succeeds(lengtho((), num(0)));
+    }
+
+    #[test]
+    fn lengtho_is_one_for_list_with_one_element() {
+        succeeds(lengtho(list![0], num(1)));
+    }
+
+    #[test]
+    fn lengtho_produces_lists_and_matching_lengths() {
+        let mut solutions = run!((l, n), lengtho(l, n));
+        assert_eq!(solutions.next(), Some(list![(), num(0)]));
+        assert_eq!(solutions.next(), Some(list![(Value::rv(0)), num(1)]));
+        assert_eq!(solutions.next(), Some(list![(Value::rv(0), Value::rv(1)), num(2)]));
     }
 }
