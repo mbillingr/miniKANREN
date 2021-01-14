@@ -1,3 +1,5 @@
+//! A simple relational database
+
 use crate::core::value::Value;
 use std::collections::HashMap;
 
@@ -31,10 +33,15 @@ impl Database {
     }
 }
 
+/// Defines a database relation.
+///
+/// The macro produces a goal-generating function, which can be used
+/// to query the database.
 #[macro_export]
 macro_rules! db_rel {
     ($($rel:ident($($args:ident),*));* $(;)?) => {
         $(
+            /// Creates a goal that succeeds if the relation is consistent with the database.
             fn $rel(db: &Arc<Database>, $($args: impl Into<Value>),*) -> impl Goal<StatSubs> {
                 let db = db.clone();
                 $(let $args = $args.into();)*
@@ -53,6 +60,7 @@ macro_rules! db_rel {
     };
 }
 
+/// Insert facts into databases.
 #[macro_export]
 macro_rules! db_facts {
     ($($db:ident { $($rel:ident($($args:expr),*));* $(;)? })*) => {
