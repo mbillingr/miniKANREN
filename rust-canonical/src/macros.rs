@@ -221,3 +221,148 @@ macro_rules! condu {
         $crate::conda!($($crate::prelude::once($gO), $($g),*);*)
     }
 }
+
+/// `Matche!`  behaves like `conde!` but allows pattern matching.
+/// This simplifies destructuring and creation of fresh variables.
+///
+/// Every successful *line* contributes one or more values.
+#[macro_export]
+macro_rules! matche {
+    ( $val:expr, $( $pat:tt => $($goal:expr),* ; )+ ) => {
+        $crate::disj! {
+            $( $crate::matche!(@match: $val, $pat => $($goal),*) );*
+        }
+    };
+
+    // $val matches a single-element list
+    (@match: $val:expr, ($h:tt) => $($goal:expr),*) => {
+        fresh! { (h),
+            $crate::goals::list::conso(h, (), $val),
+            $crate::matche!(@match: h, $h => $($goal),*)
+        }
+    };
+
+    // $val matches a pair
+    (@match: $val:expr, ($h:tt ; $t:tt) => $($goal:expr),*) => {
+        fresh! { (h, t),
+            $crate::goals::list::conso(h, t, $val),
+            $crate::matche!(@match: h, $h => $crate::matche!(@match: t, $t => $($goal),*))
+        }
+    };
+
+    // $val matches a a list with at least one item
+    (@match: $val:expr, ($h:tt, $($rest:tt)*) => $($goal:expr),*) => {
+        fresh! { (h, t),
+            $crate::goals::list::conso(h, t, $val),
+            $crate::matche!(@match: h, $h => $crate::matche!(@match: t, ($($rest)*) => $($goal),*))
+        }
+    };
+
+    // $val matches anything - effectively it's ignored
+    (@match: $val:expr, _ => $($goal:expr),*) => {
+        $crate::conj!{
+            $($goal),*
+        }
+    };
+
+    // $val matches a name - it is bound to a variable with that name
+    (@match: $val:expr, $v:ident => $($goal:expr),*) => {
+        fresh! { ($v),
+            $crate::prelude::eq($val, $v),
+            $($goal),*
+        }
+    };
+
+    // $val matches an expression - they are unified
+    (@match: $val:expr, $c:expr => $($goal:expr),*) => {
+        $crate::conj!{
+            $crate::prelude::eq($val, $c),
+            $($goal),*
+        }
+    };
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::testing::{fails, has_unique_solution, succeeds};
+    use crate::{fail, succeed, list, eq};
+    use crate::{Goal, Value};
+
+    #[test]
+    fn matching_anything_succeeds_always() {
+        succeeds(matche! { q,
+            _ => ;
+        });
+    }
+
+    #[test]
+    fn matching_fails_if_any_further_goals_fail() {
+        fails(matche! { q,
+            _ => succeed(), fail(), succeed();
+        });
+    }
+
+    #[test]
+    fn matching_a_constant_binds_value() {
+        has_unique_solution(
+            run!(
+                q,
+                matche! { q,
+                    1 => ;
+                }
+            ),
+            1.into(),
+        );
+    }
+
+    #[test]
+    fn each_successful_matching_line_contributes_a_value() {
+        assert_eq!(
+            run!(*, q,
+                matche! { q,
+                    1 => ;
+                    2 => fail();
+                    3 => ;
+                }
+            )
+            .into_vec(),
+            vec![1, 3],
+        );
+    }
+
+    #[test]
+    fn matching_deconstructs_lists() {
+        assert_eq!(
+            run!(*, q,
+                matche! { q,
+                    (_) => ;
+                    (_, _) => ;
+                    (_, _ ; _) => ;
+                }
+            ).into_vec(),
+            vec![
+                list![Value::rv(0)],
+                list![Value::rv(0), Value::rv(1)],
+                list![Value::rv(0), Value::rv(1) ; Value::rv(2)],
+            ],
+        );
+    }
+
+    #[test]
+    fn matching_deconstructs_lists_and_binds_fresh_vars() {
+        assert_eq!(
+            run!(*, q,
+                matche! { q,
+                    (a) => eq(a, 1);
+                    (b, c) => eq(b, c);
+                    (a, _ ; d) => eq(d, 2);
+                }
+            ).into_vec(),
+            vec![
+                list![1],
+                list![Value::rv(0), Value::rv(0)],
+                list![Value::rv(0), Value::rv(1) ; 2],
+            ],
+        );
+    }
+}
