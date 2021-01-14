@@ -6,7 +6,7 @@ use crate::goals::combinators::{conj2, disj2};
 use crate::goals::primitive::eq;
 use crate::goals::StatSubs;
 use crate::{conde, conj, defrel, disj, fresh};
-use crate::peano::{inco, zero};
+use crate::goals::numbers::{inco, zero};
 
 /// Constructs a cons list.
 #[macro_export]
@@ -129,7 +129,7 @@ mod tests {
     use super::*;
     use crate::testing::{fails, succeeds};
     use crate::*;
-    use crate::peano::num;
+    use crate::goals::numbers::num;
 
     #[test]
     fn pairo_binds_pair_to_variable() {
