@@ -79,12 +79,12 @@ defrel! {
     /// Creates a goal that succeeds if a + b equals c
     pub addo(a, b, c) {
         conde!{
-            fresh!{ (a0, c0),
-                inco(a0, a.clone()),
+            eq(b.clone(), Zero), eq(a.clone(), c.clone());
+            fresh!{ (b0, c0),
+                inco(b0, b.clone()),
                 inco(c0, c.clone()),
-                addo(a0, b.clone(), c0),
+                addo(a.clone(), b0, c0),
             };
-            eq(a, Zero), eq(b, c);
         }
     }
 }
@@ -299,10 +299,10 @@ mod tests {
         assert_eq!(
             run!(*, (a, b), addo(a, b, num(3))).into_vec(),
             vec![
-                list![num(0), num(3)],
-                list![num(1), num(2)],
+                list![num(3), num(0)],
                 list![num(2), num(1)],
-                list![num(3), num(0)]
+                list![num(1), num(2)],
+                list![num(0), num(3)],
             ]
         );
     }
@@ -310,7 +310,7 @@ mod tests {
     #[test]
     fn addo_generates_constrained_pairs_of_numbers() {
         assert_eq!(
-            run!(3, (a, c), addo(a, num(3), c)).into_vec(),
+            run!(3, (b, c), addo(num(3), b, c)).into_vec(),
             vec![
                 list![num(0), num(3)],
                 list![num(1), num(4)],
@@ -353,11 +353,6 @@ mod tests {
 
     #[test]
     fn mulo_computes_product_of_two_values() {
-        // TODO: this crashes because there although there is only one solution, the
-        //       goal does not fail when asked for the second solution but looks for
-        //       ever increasing numbers.
-        //    A) Fix the test?
-        //    B) Possible to break the recursion?
         has_unique_solution(run!(q, mulo(num(2), num(3), q)), num(6));
     }
 
