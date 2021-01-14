@@ -3,10 +3,10 @@ use crate::core::logic_variable::Var;
 use crate::core::stream::Stream;
 use crate::core::value::Value;
 use crate::goals::combinators::{conj2, disj2};
+use crate::goals::numbers::{inco, zero};
 use crate::goals::primitive::eq;
 use crate::goals::StatSubs;
 use crate::{conde, conj, defrel, disj, fresh};
-use crate::goals::numbers::{inco, zero};
 
 /// Constructs a cons list.
 #[macro_export]
@@ -127,9 +127,9 @@ defrel! {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::goals::numbers::num;
     use crate::testing::{fails, succeeds};
     use crate::*;
-    use crate::goals::numbers::num;
 
     #[test]
     fn pairo_binds_pair_to_variable() {
@@ -286,6 +286,9 @@ mod tests {
         let mut solutions = run!((l, n), lengtho(l, n));
         assert_eq!(solutions.next(), Some(list![(), num(0)]));
         assert_eq!(solutions.next(), Some(list![(Value::rv(0)), num(1)]));
-        assert_eq!(solutions.next(), Some(list![(Value::rv(0), Value::rv(1)), num(2)]));
+        assert_eq!(
+            solutions.next(),
+            Some(list![(Value::rv(0), Value::rv(1)), num(2)])
+        );
     }
 }
