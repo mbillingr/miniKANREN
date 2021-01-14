@@ -63,12 +63,9 @@ defrel! {
 defrel! {
     /// Creates a goal that succeeds if p is a list.
     pub listo(l) {
-        conde!{
-            eq(l.clone(), ());
-            fresh!{ (d),
-                cdro(l, d),
-                listo(d)
-            };
+        matche!{ l,
+            () => ;
+            (_ ; tail) => listo(tail);
         }
     }
 }
@@ -76,12 +73,9 @@ defrel! {
 defrel! {
     /// Creates a goal that succeeds if l is a list that contains x.
     pub membero(x, l) {
-        conde!{
-            caro(l.clone(), x.clone());
-            fresh!{ (d),
-                cdro(l, d),
-                membero(x, d),
-            };
+        matche!{ l,
+            (h ; _) => eq(x.clone(), h);
+            (_ ; t) => membero(x, t);
         }
     }
 }
@@ -96,7 +90,6 @@ defrel! {
                 appendo(at, b.clone(), lt),
             );
             eq(a.clone(), ()), eq(b.clone(), l.clone());
-            //eq(a.clone(), ()), eq(b.clone(), ()), eq(l.clone(), ());
         }
     }
 }
@@ -104,17 +97,9 @@ defrel! {
 defrel! {
     /// Creates a goal that succeeds if the list has length n.
     pub lengtho(l, n) {
-        conde! {
-            // empty list has zero length
-            eq(l.clone(), ()),
-            zero(n.clone());
-
-            // pair has length one more than length of tail
-            fresh!{ (l0, n0),
-                cdro(l, l0),
-                inco(n0, n),
-                lengtho(l0, n0),
-            };
+        matche! { l,
+            () => zero(n.clone());
+            (_ ; tail) => fresh!{ (nt), inco(nt, n), lengtho(tail, nt) };
         }
     }
 }

@@ -237,7 +237,7 @@ macro_rules! matche {
     // $val matches a single-element list
     (@match: $val:expr, ($h:tt) => $($goal:expr),*) => {
         fresh! { (h),
-            $crate::goals::list::conso(h, (), $val),
+            $crate::goals::list::conso(h, (), $val.clone()),
             $crate::matche!(@match: h, $h => $($goal),*)
         }
     };
@@ -245,7 +245,7 @@ macro_rules! matche {
     // $val matches a pair
     (@match: $val:expr, ($h:tt ; $t:tt) => $($goal:expr),*) => {
         fresh! { (h, t),
-            $crate::goals::list::conso(h, t, $val),
+            $crate::goals::list::conso(h, t, $val.clone()),
             $crate::matche!(@match: h, $h => $crate::matche!(@match: t, $t => $($goal),*))
         }
     };
@@ -253,7 +253,7 @@ macro_rules! matche {
     // $val matches a a list with at least one item
     (@match: $val:expr, ($h:tt, $($rest:tt)*) => $($goal:expr),*) => {
         fresh! { (h, t),
-            $crate::goals::list::conso(h, t, $val),
+            $crate::goals::list::conso(h, t, $val.clone()),
             $crate::matche!(@match: h, $h => $crate::matche!(@match: t, ($($rest)*) => $($goal),*))
         }
     };
@@ -268,7 +268,7 @@ macro_rules! matche {
     // $val matches a name - it is bound to a variable with that name
     (@match: $val:expr, $v:ident => $($goal:expr),*) => {
         fresh! { ($v),
-            $crate::prelude::eq($val, $v),
+            $crate::prelude::eq($val.clone(), $v),
             $($goal),*
         }
     };
@@ -276,7 +276,7 @@ macro_rules! matche {
     // $val matches an expression - they are unified
     (@match: $val:expr, $c:expr => $($goal:expr),*) => {
         $crate::conj!{
-            $crate::prelude::eq($val, $c),
+            $crate::prelude::eq($val.clone(), $c),
             $($goal),*
         }
     };
@@ -285,7 +285,7 @@ macro_rules! matche {
 #[cfg(test)]
 mod tests {
     use crate::testing::{fails, has_unique_solution, succeeds};
-    use crate::{fail, succeed, list, eq};
+    use crate::{eq, fail, list, succeed};
     use crate::{Goal, Value};
 
     #[test]
@@ -339,7 +339,8 @@ mod tests {
                     (_, _) => ;
                     (_, _ ; _) => ;
                 }
-            ).into_vec(),
+            )
+            .into_vec(),
             vec![
                 list![Value::rv(0)],
                 list![Value::rv(0), Value::rv(1)],
@@ -357,7 +358,8 @@ mod tests {
                     (b, c) => eq(b, c);
                     (a, _ ; d) => eq(d, 2);
                 }
-            ).into_vec(),
+            )
+            .into_vec(),
             vec![
                 list![1],
                 list![Value::rv(0), Value::rv(0)],
