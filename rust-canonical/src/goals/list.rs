@@ -74,8 +74,8 @@ defrel! {
     /// Creates a goal that succeeds if l is a list that contains x.
     pub membero(x, l) {
         matche!{ l,
-            (h ; _) => eq(x.clone(), h);
-            (_ ; t) => membero(x, t);
+            (_ ; t) => membero(x.clone(), t);
+            ({x} ; _) => ;
         }
     }
 }

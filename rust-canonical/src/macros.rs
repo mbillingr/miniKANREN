@@ -367,4 +367,19 @@ mod tests {
             ],
         );
     }
+
+    #[test]
+    fn matche_can_escape_outside_vars() {
+        let x = 42;
+        has_unique_solution(
+            run!(
+                q,
+                matche! { q,
+                    // The trick here is that wrapping x in {} turns it into an expression
+                    ({x}) => ;
+                }
+            ),
+            list![42],
+        );
+    }
 }
