@@ -9,6 +9,8 @@ pub mod goals;
 pub mod prelude;
 pub mod testing;
 
+pub use prelude::*;
+
 #[cfg(test)]
 mod tests {
     use crate::core::goal::Goal;
