@@ -20,33 +20,32 @@ macro_rules! conj {
 /// A relation is a function that creates a goal.
 #[macro_export]
 macro_rules! defrel {
+
     ($(#[$outer:meta])* pub $name:ident($($args:ident),*) { $($g:expr),* $(,)? }) => {
         $(#[$outer])*
         pub fn $name($($args: impl 'static + Into<Value>),*) -> impl Goal<StatSubs> {
-            $(
-                let $args = $args.into();
-            )*
-            move |s| {
-                $(
-                    let $args = $args.clone();
-                )*
-                Stream::suspension(move || conj!($($g),*).apply(s))
-            }
+            defrel!(@body: $($args),* { $($g),* })
         }
     };
 
     ($(#[$outer:meta])* $name:ident($($args:ident),*) { $($g:expr),* $(,)? }) => {
         $(#[$outer])*
         fn $name($($args: impl 'static + Into<Value>),*) -> impl Goal<StatSubs> {
-            $(
-                let $args = $args.into();
-            )*
-            move |s| {
-                $(
-                    let $args = $args.clone();
-                )*
-                Stream::suspension(move || conj!($($g),*).apply(s))
-            }
+            defrel!(@body: $($args),* { $($g),* })
+        }
+    };
+
+    ($(#[$outer:meta])* pub trace $name:ident($($args:ident),*) { $($g:expr),* $(,)? }) => {
+        $(#[$outer])*
+        pub fn $name($($args: impl 'static + Into<Value>),*) -> impl Goal<StatSubs> {
+            defrel!(@tracebody: $name, $($args),* { $($g),* })
+        }
+    };
+
+    ($(#[$outer:meta])* trace $name:ident($($args:ident),*) { $($g:expr),* $(,)? }) => {
+        $(#[$outer])*
+        fn $name($($args: impl 'static + Into<Value>),*) -> impl Goal<StatSubs> {
+            defrel!(@tracebody: $name, $($args),* { $($g),* })
         }
     };
 
@@ -59,6 +58,58 @@ macro_rules! defrel {
     ($name:ident($($args:ident),*) { $($g:expr);* $(;)? }) => {
         defrel!{$name($($args),*) { $($g),* }}
     };
+
+    (@body: $($args:ident),* { $($g:expr),* }) => {{
+        $(
+            let $args = $args.into();
+        )*
+        move |s| {
+            $(
+                let $args = $args.clone();
+            )*
+            Stream::suspension(move || conj!($($g),*).apply(s))
+        }
+    }};
+
+    (@tracebody: $name:ident, $($args:ident),* { $($g:expr),* }) => {{
+        $(
+            let $args = $args.into();
+        )*
+        move |s: crate::core::substitution::Substitution<'static>| {
+            {
+                print!("{} apply:", stringify!($name));
+                let sx = {
+                    $(
+                        let $args = $args.clone();
+                        print!(" {}={:?}", stringify!($args), s.reify(&$args));
+                    )*
+                    conj!($($g),*).apply(s.clone())
+                };
+                match sx {
+                   Stream::Pair(first_sub, next) => {
+                        print!(" succeeded with");
+                        $(print!(" {}={:?}", stringify!($args), first_sub.reify(&$args));)*
+                        if next.is_empty() {
+                            println!();
+                        } else {
+                            println!(" ...");
+                        }
+                   }
+                   Stream::Suspension(_) => println!(" ..."),
+                   Stream::Empty => println!(" failed."),
+                }
+            }
+
+            $(
+                let $args = $args.clone();
+            )*
+
+            Stream::suspension(move || {
+                let sx = conj!($($g),*).apply(s);
+                sx
+            })
+        }
+    }};
 }
 
 /// Run one or more goals.
