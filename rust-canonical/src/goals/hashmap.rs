@@ -65,7 +65,7 @@ fn double_iterator<'a, K: Eq + Hash, V>(
 #[cfg(test)]
 mod tests {
     use crate::core::value::Value;
-    use crate::testing::{ has_unique_solution,};
+    use crate::testing::has_unique_solution;
     use crate::*;
     use std::collections::HashMap;
 
