@@ -5,6 +5,8 @@ use crate::core::goal::Goal;
 use crate::core::stream::Stream;
 use crate::core::substitution::Substitution;
 use crate::goals::StatSubs;
+use crate::{succeed, RawGoal, Value};
+use std::sync::Arc;
 
 /// Creates a goal that succeeds if either of its subgoals succeeds.
 pub fn disj2(g1: impl Goal<StatSubs>, g2: impl Goal<StatSubs>) -> impl Goal<StatSubs> {
@@ -46,4 +48,23 @@ pub fn once(g: impl Goal<StatSubs>) -> impl Goal<StatSubs> {
             }
         }
     }
+}
+
+pub fn everyg<'a, G: 'static + Goal<Substitution<'static>>>(
+    goalfn: impl Fn(&'a Value) -> G,
+    mut values: impl Iterator<Item = &'a Value>,
+) -> Arc<dyn RawGoal<Substitution<'static>>> {
+    let mut final_goal: Arc<dyn RawGoal<_>>;
+
+    if let Some(v) = values.next() {
+        final_goal = Arc::new(goalfn(v));
+    } else {
+        return Arc::new(succeed());
+    }
+
+    for v in values {
+        final_goal = Arc::new(conj2(goalfn(v), final_goal));
+    }
+
+    final_goal
 }
