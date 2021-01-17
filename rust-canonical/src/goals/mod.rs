@@ -3,6 +3,8 @@
 #[macro_use]
 pub mod combinators;
 #[macro_use]
+pub mod hashmap;
+#[macro_use]
 pub mod list;
 #[macro_use]
 pub mod primitive;
