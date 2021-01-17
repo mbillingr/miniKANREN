@@ -249,9 +249,21 @@ macro_rules! conda {
 /// succeeds only once.
 #[macro_export]
 macro_rules! condu {
-    ( $($g0:expr, $($g:expr),*);* ) => {
-        $crate::conda!($($crate::prelude::once($gO), $($g),*);*)
-    }
+    ($g0:expr, $($g:expr),+;) => {
+        $crate::conj!($crate::once($g0), $($g),*)
+    };
+
+    ($g0:expr;) => {
+        $crate::once($g0)
+    };
+
+    ($g0:expr, $($g:expr),+; $($rest:tt)*) => {
+        $crate::prelude::ifte($crate::once($g0), $crate::conj!($($g),*), $crate::condu!($($rest)*))
+    };
+
+    ($g0:expr; $($rest:tt)*) => {
+        $crate::prelude::ifte($crate::once($g0), $crate::succeed(), $crate::condu!($($rest)*))
+    };
 }
 
 /// `Matche!`  behaves like `conde!` but allows pattern matching.
