@@ -236,8 +236,12 @@ macro_rules! conde {
 macro_rules! conda {
     ($($g:expr),*) => { $crate::conj!($($g),*) };
 
-    ($g0:expr, $($g:expr),*; $($rest:tt)*) => {
+    ($g0:expr, $($g:expr),+; $($rest:tt)*) => {
         $crate::prelude::ifte($g0, $crate::conj!($($g),*), $crate::conda!($($rest)*))
+    };
+
+    ($g0:expr; $($rest:tt)*) => {
+        $crate::prelude::ifte($g0, $crate::succeed(), $crate::conda!($($rest)*))
     };
 }
 
