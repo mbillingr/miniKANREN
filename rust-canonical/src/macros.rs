@@ -330,7 +330,7 @@ macro_rules! matche {
 mod tests {
     use crate::testing::{fails, has_unique_solution, succeeds};
     use crate::{eq, fail, list, succeed};
-    use crate::{Goal, Value};
+    use crate::{RawGoal, Value};
 
     #[test]
     fn matching_anything_succeeds_always() {

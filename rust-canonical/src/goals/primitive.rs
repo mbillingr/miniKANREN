@@ -1,5 +1,5 @@
 /// Primitive relations.
-use crate::core::goal::Goal;
+use crate::core::goal::{Goal, RawGoal};
 use crate::core::stream::Stream;
 use crate::core::substitution::Substitution;
 use crate::core::value::Value;

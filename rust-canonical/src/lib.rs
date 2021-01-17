@@ -13,7 +13,7 @@ pub use prelude::*;
 
 #[cfg(test)]
 mod tests {
-    use crate::core::goal::Goal;
+    use crate::core::goal::RawGoal;
     use crate::core::logic_variable::{ReifiedVar, Var};
     use crate::core::stream::Stream;
     use crate::core::substitution::Substitution;

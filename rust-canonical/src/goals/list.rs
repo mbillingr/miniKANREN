@@ -1,4 +1,4 @@
-use crate::core::goal::Goal;
+use crate::core::goal::RawGoal;
 use crate::goals::numbers::{inco, zero};
 use crate::goals::primitive::eq;
 use crate::{conde, defrel, fresh};
