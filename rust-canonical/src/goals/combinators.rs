@@ -50,6 +50,8 @@ pub fn once(g: impl Goal<StatSubs>) -> impl Goal<StatSubs> {
     }
 }
 
+/// Passes each value in a sequence to a goal-generating function, which
+/// must all succeed.
 pub fn everyg<'a, G: 'static + Goal<Substitution<'static>>>(
     goalfn: impl Fn(&'a Value) -> G,
     mut values: impl Iterator<Item = &'a Value>,
