@@ -669,8 +669,7 @@
 (defrel (membero x l)
   (conde
     ((nullo l) fail)
-    ((fresh (a)
-      (caro l x)))
+    ((caro l x))
     ((fresh (d)
        (cdro l d)
        (membero x d)))))
