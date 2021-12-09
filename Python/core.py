@@ -185,7 +185,7 @@ def run_goal(n_or_goal, goal=None):
         return take(n, goal(Substitution()))
 
 
-def gen_var(name):
+def gen_var(name="__"):
     return variables(gen_name(name))
 
 

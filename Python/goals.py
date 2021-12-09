@@ -136,15 +136,18 @@ def suspend(s, goal):
 
 
 @make_goal
-def listo(s, x):
-    """goal that succeeds if x is a list"""
+def listo(s, x, n_min=0, n_max=None):
+    """goal that succeeds if x is a list, (optionally of limited length)"""
     if isinstance(x, list):
         yield s
         return
 
     seq = []
     while True:
-        yield from same(x, seq)(s)
+        if n_max is not None and len(seq) > n_max:
+            break
+        if len(seq) >= n_min:
+            yield from same(x, seq)(s)
         seq.append(gen_var('__'))
 
 

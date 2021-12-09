@@ -96,6 +96,7 @@ def test_append_map_inf():
     numbers = suspended_numbers(5)
     num_powers = append_map_inf(powers, numbers)
     result = list(take_inf(num_powers))
+    print(result)
     assert set(result[:1]) == {625}
     assert set(result[1:3]) == {125, 256}
     assert set(result[3:6]) == {25, 64, 81}

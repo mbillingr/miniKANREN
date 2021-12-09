@@ -1,10 +1,33 @@
 import pytest
 
 from api import run
-from core import variables, Substitution, InvalidSubstitution, reify, run_goal, reset_names
+from core import (
+    variables,
+    Substitution,
+    InvalidSubstitution,
+    reify,
+    run_goal,
+    reset_names,
+)
 from functional_data_structures import Map
-from goals import (same, fail, succeed, conj, disj, make_goal, never, always, ifte, once, symeq,
-                   suspend, listo, appendo, poso, rangeo)
+from goals import (
+    same,
+    fail,
+    succeed,
+    conj,
+    disj,
+    make_goal,
+    never,
+    always,
+    ifte,
+    once,
+    symeq,
+    suspend,
+    listo,
+    appendo,
+    poso,
+    rangeo,
+)
 from stream import SuspendIteration, take
 
 
@@ -63,8 +86,8 @@ def test_extend():
 def test_extend_and_walk():
     x, y, z = variables("x, y, z")
     s = Substitution({z: x, y: z})
-    s = s.extend(x, 'e')
-    assert s.walk(y) == 'e'
+    s = s.extend(x, "e")
+    assert s.walk(y) == "e"
 
 
 def test_same():
@@ -86,9 +109,11 @@ def test_succeed():
 
 def test_disj():
     x = variables("x")
-    goal = disj(same("olive", x),
-                same("oil", x))
-    assert set(goal(Substitution())) == {Substitution({x: "olive"}), Substitution({x: "oil"})}
+    goal = disj(same("olive", x), same("oil", x))
+    assert set(goal(Substitution())) == {
+        Substitution({x: "olive"}),
+        Substitution({x: "oil"}),
+    }
 
 
 def test_make_goal():
@@ -117,8 +142,7 @@ def test_never():
 
 def test_disj_x_never():
     x = variables("x")
-    goal = disj(same("olive", x),
-                never)
+    goal = disj(same("olive", x), never)
     s_inf = goal(Substitution())
     assert next(s_inf) == Substitution({x: "olive"})
     s_inf = assert_suspended(s_inf)
@@ -127,8 +151,7 @@ def test_disj_x_never():
 
 def test_disj_never_x():
     x = variables("x")
-    goal = disj(never,
-                same("olive", x))
+    goal = disj(never, same("olive", x))
     s_inf = goal(Substitution())
     s_inf = assert_suspended(s_inf)
     assert next(s_inf) == Substitution({x: "olive"})
@@ -151,8 +174,7 @@ def test_take_always():
 
 def test_conj():
     x = variables("x")
-    goal = conj(same("olive", x),
-                same("oil", x))
+    goal = conj(same("olive", x), same("oil", x))
     assert set(goal(Substitution())) == set()
 
 
@@ -178,84 +200,71 @@ def test_walk_deep_map():
 
 def test_reify():
     u, v, w, x, y, z = variables("u, v, w, x, y, z")
-    sub = Substitution({x: (u, w, y, z, (["ice"], z)),
-                        y: "corn",
-                        w: (v, u)})
+    sub = Substitution({x: (u, w, y, z, (["ice"], z)), y: "corn", w: (v, u)})
     re = sub.reify(x)
-    assert re == ('_0', ('_1', '_0'), 'corn', '_2', (['ice'], '_2'))
+    assert re == ("_0", ("_1", "_0"), "corn", "_2", (["ice"], "_2"))
 
 
 def test_reify_some():
     x = variables("x")
-    goal = disj(same("olive", x),
-                same("oil", x))
+    goal = disj(same("olive", x), same("oil", x))
     subs = take(5, goal(Substitution()))
     results = map(reify(x), subs)
-    assert list(results) == ['olive', 'oil']
+    assert list(results) == ["olive", "oil"]
 
 
 def test_reify_run_goal():
     x = variables("x")
-    goal = disj(same("olive", x),
-                same("oil", x))
+    goal = disj(same("olive", x), same("oil", x))
     results = map(reify(x), run_goal(5, goal))
-    assert list(results) == ['olive', 'oil']
+    assert list(results) == ["olive", "oil"]
 
 
 def test_reify_run_goal_inf():
     x = variables("x")
-    goal = disj(same("olive", x),
-                same("oil", x))
+    goal = disj(same("olive", x), same("oil", x))
     results = map(reify(x), run_goal(goal))
-    assert list(results) == ['olive', 'oil']
+    assert list(results) == ["olive", "oil"]
 
 
 def test_ifte_succeed():
     y = variables("y")
-    goal = ifte(succeed,
-                same(False, y),
-                same(True, y))
+    goal = ifte(succeed, same(False, y), same(True, y))
     assert list(goal(Substitution())) == [Substitution({y: False})]
 
 
 def test_ifte_FAIL():
     y = variables("y")
-    goal = ifte(fail,
-                same(False, y),
-                same(True, y))
+    goal = ifte(fail, same(False, y), same(True, y))
     assert list(goal(Substitution())) == [Substitution({y: True})]
 
 
 def test_ifte_combine():
     x, y = variables("x, y")
-    goal = ifte(same(True, x),
-                same(False, y),
-                same(True, y))
+    goal = ifte(same(True, x), same(False, y), same(True, y))
     assert list(goal(Substitution())) == [Substitution({x: True, y: False})]
 
 
 def test_ifte_disj():
     x, y = variables("x, y")
-    goal = ifte(disj(same(True, x), same(False, x)),
-                same(False, y),
-                same(True, y))
-    assert list(goal(Substitution())) == [Substitution({x: True, y: False}),
-                                          Substitution({x: False, y: False})]
+    goal = ifte(disj(same(True, x), same(False, x)), same(False, y), same(True, y))
+    assert list(goal(Substitution())) == [
+        Substitution({x: True, y: False}),
+        Substitution({x: False, y: False}),
+    ]
 
 
 def test_ifte_once_disj():
     x, y = variables("x, y")
-    goal = ifte(once(disj(same(True, x), same(False, x))),
-                same(False, y),
-                same(True, y))
+    goal = ifte(
+        once(disj(same(True, x), same(False, x))), same(False, y), same(True, y)
+    )
     assert list(goal(Substitution())) == [Substitution({x: True, y: False})]
 
 
 def test_ifte_cond_suspended():
     y = variables("y")
-    goal = ifte(suspend(succeed),
-                same(False, y),
-                same(True, y))
+    goal = ifte(suspend(succeed), same(False, y), same(True, y))
     s_inf = goal(Substitution())
     s_inf = assert_suspended(s_inf)
     assert list(s_inf) == [Substitution({y: False})]
@@ -263,9 +272,7 @@ def test_ifte_cond_suspended():
 
 def test_ifte_g1_suspended():
     y = variables("y")
-    goal = ifte(succeed,
-                suspend(same(False, y)),
-                same(True, y))
+    goal = ifte(succeed, suspend(same(False, y)), same(True, y))
     s_inf = goal(Substitution())
     s_inf = assert_suspended(s_inf)
     assert list(s_inf) == [Substitution({y: False})]
@@ -273,9 +280,7 @@ def test_ifte_g1_suspended():
 
 def test_ifte_g2_suspended():
     y = variables("y")
-    goal = ifte(fail,
-                same(False, y),
-                suspend(same(True, y)))
+    goal = ifte(fail, same(False, y), suspend(same(True, y)))
     s_inf = goal(Substitution())
     s_inf = assert_suspended(s_inf)
     assert list(s_inf) == [Substitution({y: True})]
@@ -298,9 +303,9 @@ def test_listo():
     x = variables("x")
     goal = listo(x)
     s_inf = goal(Substitution())
-    v1 = variables('__1')
-    v2 = variables('__2')
-    v3 = variables('__3')
+    v1 = variables("__1")
+    v2 = variables("__2")
+    v3 = variables("__3")
     assert next(s_inf) == Substitution({x: []})
     assert next(s_inf) == Substitution({x: [v1]})
     assert next(s_inf) == Substitution({x: [v1, v2]})
@@ -315,54 +320,56 @@ def test_appendo():
     w, x, y, z = variables("w, x, y, z")
 
     goal = conj(same(z, (x, y)), appendo(x, y, [1, 2, 3]))
-    assert list(run(z, goal)) == [([], [1, 2, 3]),
-                                  ([1], [2, 3]),
-                                  ([1, 2], [3]),
-                                  ([1, 2, 3], [])]
+    assert list(run(z, goal)) == [
+        ([], [1, 2, 3]),
+        ([1], [2, 3]),
+        ([1, 2], [3]),
+        ([1, 2, 3], []),
+    ]
 
     goal = conj(same(z, (x, y)), appendo([1, 2, 3], x, y))
-    assert list(run(3, z, goal)) == [([], [1, 2, 3]),
-                                     (['_0'], [1, 2, 3, '_0']),
-                                     (['_0', '_1'], [1, 2, 3, '_0', '_1'])]
+    assert list(run(3, z, goal)) == [
+        ([], [1, 2, 3]),
+        (["_0"], [1, 2, 3, "_0"]),
+        (["_0", "_1"], [1, 2, 3, "_0", "_1"]),
+    ]
 
     goal = conj(same(z, (x, y)), appendo(x, [1, 2, 3], y))
-    assert list(run(3, z, goal)) == [([], [1, 2, 3]),
-                                     (['_0'], ['_0', 1, 2, 3]),
-                                     (['_0', '_1'], ['_0', '_1', 1, 2, 3])]
+    assert list(run(3, z, goal)) == [
+        ([], [1, 2, 3]),
+        (["_0"], ["_0", 1, 2, 3]),
+        (["_0", "_1"], ["_0", "_1", 1, 2, 3]),
+    ]
 
     goal = conj(same(z, (w, x, y)), appendo(w, x, y))
-    assert list(run(6, z, goal)) == [([], [], []),
-                                     ([], ['_0'], ['_0']),
-                                     (['_0'], [], ['_0']),
-                                     ([], ['_0', '_1'], ['_0', '_1']),
-                                     (['_0'], ['_1'], ['_0', '_1']),
-                                     (['_0', '_1'], [], ['_0', '_1'])]
+    assert list(run(6, z, goal)) == [
+        ([], [], []),
+        ([], ["_0"], ["_0"]),
+        (["_0"], [], ["_0"]),
+        ([], ["_0", "_1"], ["_0", "_1"]),
+        (["_0"], ["_1"], ["_0", "_1"]),
+        (["_0", "_1"], [], ["_0", "_1"]),
+    ]
 
 
 def test_poso():
     x = variables("x")
-    assert list(run(3, x, poso('abc'))) == []
-    assert list(run(3, x, poso(42))) == ['_0']
+    assert list(run(3, x, poso("abc"))) == []
+    assert list(run(3, x, poso(42))) == ["_0"]
     assert list(run(3, x, poso(x))) == [1, 2, 3]
 
 
 def test_rangeo():
     x = variables("x")
-    assert list(run(x, rangeo(-2, 'abc', 2))) == []
+    assert list(run(x, rangeo(-2, "abc", 2))) == []
     assert list(run(x, rangeo(-2, 42, 2))) == []
-    assert list(run(x, rangeo(-2, -1, 2))) == ['_0']
+    assert list(run(x, rangeo(-2, -1, 2))) == ["_0"]
     assert list(run(x, rangeo(-2, x, 2))) == [-2, -1, 0, 1]
 
 
 def test_symeq_integers():
     a, x, y, z = variables("a, x, y, z")
-    goal = conj(same(a, (x, y, z)),
-                rangeo(-1, y, 2),
-                rangeo(1, z, 3),
-                symeq(x + y, z))
-    assert list(run(a, goal)) == [(2, -1, 1),
-                                  (1, 0, 1),
-                                  (3, -1, 2),
-                                  (0, 1, 1),
-                                  (2, 0, 2),
-                                  (1, 1, 2)]
+    goal = conj(same(a, (x, y, z)), rangeo(-1, y, 2), rangeo(1, z, 3), symeq(x + y, z))
+    assert set(run(a, goal)) == set(
+        [(2, -1, 1), (1, 0, 1), (3, -1, 2), (0, 1, 1), (2, 0, 2), (1, 1, 2)]
+    )
