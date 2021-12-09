@@ -236,8 +236,12 @@ macro_rules! conde {
 macro_rules! conda {
     ($($g:expr),*) => { $crate::conj!($($g),*) };
 
-    ($g0:expr, $($g:expr),*; $($rest:tt)*) => {
+    ($g0:expr, $($g:expr),+; $($rest:tt)*) => {
         $crate::prelude::ifte($g0, $crate::conj!($($g),*), $crate::conda!($($rest)*))
+    };
+
+    ($g0:expr; $($rest:tt)*) => {
+        $crate::prelude::ifte($g0, $crate::succeed(), $crate::conda!($($rest)*))
     };
 }
 
@@ -245,9 +249,21 @@ macro_rules! conda {
 /// succeeds only once.
 #[macro_export]
 macro_rules! condu {
-    ( $($g0:expr, $($g:expr),*);* ) => {
-        $crate::conda!($($crate::prelude::once($gO), $($g),*);*)
-    }
+    ($g0:expr, $($g:expr),+;) => {
+        $crate::conj!($crate::once($g0), $($g),*)
+    };
+
+    ($g0:expr;) => {
+        $crate::once($g0)
+    };
+
+    ($g0:expr, $($g:expr),+; $($rest:tt)*) => {
+        $crate::prelude::ifte($crate::once($g0), $crate::conj!($($g),*), $crate::condu!($($rest)*))
+    };
+
+    ($g0:expr; $($rest:tt)*) => {
+        $crate::prelude::ifte($crate::once($g0), $crate::succeed(), $crate::condu!($($rest)*))
+    };
 }
 
 /// `Matche!`  behaves like `conde!` but allows pattern matching.
@@ -314,7 +330,7 @@ macro_rules! matche {
 mod tests {
     use crate::testing::{fails, has_unique_solution, succeeds};
     use crate::{eq, fail, list, succeed};
-    use crate::{Goal, Value};
+    use crate::{RawGoal, Value};
 
     #[test]
     fn matching_anything_succeeds_always() {

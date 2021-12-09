@@ -14,7 +14,7 @@ macro_rules! hashmap {
 }
 
 impl<T: 'static + Debug + Eq + Hash> Structure for HashMap<T, Value> {
-    fn occurs<'s>(&self, x: &Var, s: &Substitution<'s>) -> bool {
+    fn occurs<'s>(&self, _x: &Var, _s: &Substitution<'s>) -> bool {
         //s.occurs(x, &self.first) || s.occurs(x, &self.second)
         unimplemented!()
     }
@@ -27,12 +27,12 @@ impl<T: 'static + Debug + Eq + Hash> Structure for HashMap<T, Value> {
         Some(s)
     }
 
-    fn walk_star(self: Arc<Self>, s: &Substitution<'_>) -> Value {
+    fn walk_star(self: Arc<Self>, _s: &Substitution<'_>) -> Value {
         //(s.walk_star(&self.first), s.walk_star(&self.second)).into()
         unimplemented!()
     }
 
-    fn reify_s<'s>(&self, s: Substitution<'s>) -> Substitution<'s> {
+    fn reify_s<'s>(&self, _s: Substitution<'s>) -> Substitution<'s> {
         //s.reify_s(&self.first).reify_s(&self.second)
         unimplemented!()
     }
@@ -44,7 +44,7 @@ impl<T: 'static + Debug + Eq + Hash> Structure for HashMap<T, Value> {
     fn eqv(&self, other: &Value) -> bool {
         other
             .downcast_ref::<Self>()
-            .map(|v| double_iterator(self, v).all(|(k, v1, v2)| v1 == v2))
+            .map(|v| double_iterator(self, v).all(|(_, v1, v2)| v1 == v2))
             .unwrap_or(false)
     }
 }
@@ -64,9 +64,8 @@ fn double_iterator<'a, K: Eq + Hash, V>(
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use crate::core::value::Value;
-    use crate::testing::{fails, has_unique_solution, succeeds};
+    use crate::testing::has_unique_solution;
     use crate::*;
     use std::collections::HashMap;
 

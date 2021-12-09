@@ -1,6 +1,6 @@
 pub use crate::{
     core::{
-        goal::Goal,
+        goal::{Goal, RawGoal},
         logic_variable::{ReifiedVar, Var},
         stream::Stream,
         substitution::Substitution,

@@ -1,4 +1,4 @@
-use crate::core::goal::Goal;
+use crate::core::goal::RawGoal;
 use crate::goals::numbers::{inco, zero};
 use crate::goals::primitive::eq;
 use crate::{conde, defrel, fresh};
@@ -98,12 +98,21 @@ defmatch! {
     }
 }
 
+defmatch! {
+    /// Creates a goal that succeeds if element x can be removed from list l to
+    /// form list out. If x does not occur in l it fails.
+    pub rembero(x, l, out) {
+        (_, _, _) => conso(x.clone(), out.clone(), l.clone());
+        (_, (a ; rest), (b ; tmp)) => eq(a, b), rembero(x, rest, tmp);
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::core::value::Value;
     use crate::goals::numbers::num;
-    use crate::testing::{fails, succeeds};
+    use crate::testing::{fails, has_unique_solution, succeeds};
     use crate::*;
 
     #[test]
@@ -265,5 +274,37 @@ mod tests {
             solutions.next(),
             Some(list![(Value::rv(0), Value::rv(1)), num(2)])
         );
+    }
+
+    #[test]
+    fn rembero_on_empty_list_always_fails() {
+        fails(fresh! {(x), rembero(x, list![], list![])});
+    }
+
+    #[test]
+    fn rembero_fails_if_item_not_in_list() {
+        let q = Var::new("q");
+        fails(rembero(0, list![1, 2, 3], q));
+    }
+
+    #[test]
+    fn rembero_returns_empty_list_if_it_removes_the_only_item() {
+        has_unique_solution(run!(q, rembero(0, list![0], q)), list![]);
+    }
+
+    #[test]
+    fn rembero_generates_possible_removal_combinations() {
+        let solutions: Vec<_> = run!(q, rembero(1, list![0, 1, 2, 3, 0, 1, 2, 3], q)).collect();
+        assert_eq!(
+            solutions,
+            vec![list![0, 2, 3, 0, 1, 2, 3], list![0, 1, 2, 3, 0, 2, 3],]
+        );
+    }
+
+    #[test]
+    fn rembero_lists_all_items_that_can_be_removed_from_list() {
+        let f = Var::new("f");
+        let solutions: Vec<_> = run!(q, rembero(q, list![0, 1, 2, 3], f)).collect();
+        assert_eq!(solutions, vec![0, 1, 2, 3]);
     }
 }

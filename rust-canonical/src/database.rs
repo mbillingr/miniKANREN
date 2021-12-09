@@ -42,7 +42,7 @@ macro_rules! db_rel {
     ($($rel:ident($($args:ident),*));* $(;)?) => {
         $(
             /// Creates a goal that succeeds if the relation is consistent with the database.
-            fn $rel(db: &Arc<$crate::database::Database>, $($args: impl Into<$crate::prelude::Value>),*) -> impl $crate::prelude::Goal<$crate::prelude::Substitution<'static>> {
+            fn $rel(db: &Arc<$crate::database::Database>, $($args: impl Into<$crate::prelude::Value>),*) -> impl Clone + $crate::prelude::Goal<$crate::prelude::Substitution<'static>> {
                 let db = db.clone();
                 $(let $args = $args.into();)*
                 move |s: $crate::prelude::Substitution<'static>| {

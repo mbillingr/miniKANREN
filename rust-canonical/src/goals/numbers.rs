@@ -4,7 +4,7 @@
 //! horribly inefficient but very simple. Will serve as a
 //! baseline for future more efficient implementations.
 
-use crate::core::goal::Goal;
+use crate::core::goal::{Goal, RawGoal};
 use crate::core::logic_variable::Var;
 use crate::core::structure::Structure;
 use crate::core::substitution::Substitution;
