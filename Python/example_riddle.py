@@ -3,7 +3,7 @@ from core import variables, Substitution, reset_names, is_var, Variable, gen_var
 from goals import make_goal, fail, same, succeed, disj, conj, listo
 
 import sys
-sys.setrecursionlimit(1000)
+sys.setrecursionlimit(10000)
 
 
 var = gen_var
